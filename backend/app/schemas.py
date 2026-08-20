@@ -101,3 +101,59 @@ class ActionPackGenerateRequest(BaseModel):
 class ActionPackGenerateResponse(BaseModel):
     character_id: int
     actions: list[ActionAssetRead]
+
+
+class TextProviderConfigUpdate(BaseModel):
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, ge=1, le=4096)
+    thinking_enabled: bool | None = None
+    reasoning_effort: str | None = None
+
+
+class ImageProviderConfigUpdate(BaseModel):
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    generation_path: str | None = None
+    edit_path: str | None = None
+    quality: str | None = None
+    size: str | None = None
+    background: str | None = None
+    input_fidelity: str | None = None
+
+
+class ProviderConfigUpdate(BaseModel):
+    text: TextProviderConfigUpdate | None = None
+    image: ImageProviderConfigUpdate | None = None
+
+
+class TextProviderConfigRead(BaseModel):
+    provider_name: str
+    api_key_present: bool
+    base_url: str
+    model: str
+    temperature: float
+    max_tokens: int
+    thinking_enabled: bool
+    reasoning_effort: str
+
+
+class ImageProviderConfigRead(BaseModel):
+    provider_name: str
+    api_key_present: bool
+    base_url: str
+    model: str
+    generation_path: str
+    edit_path: str
+    quality: str
+    size: str
+    background: str
+    input_fidelity: str
+
+
+class ProviderConfigRead(BaseModel):
+    text: TextProviderConfigRead
+    image: ImageProviderConfigRead

@@ -5,8 +5,8 @@ import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 
-from app.config import get_settings
 from app.action_templates import DEFAULT_ACTION_TEMPLATES
+from app.config import get_settings
 from app.database import get_connection, init_db, row_to_dict
 from app.image_generation import (
     ImageGenerationClient,
@@ -17,6 +17,7 @@ from app.image_generation import (
     save_media,
 )
 from app.llm import LLMClient
+from app.provider_store import get_provider_settings_payload, save_provider_config
 from app.schemas import (
     ActionAssetCreate,
     ActionAssetRead,
@@ -33,6 +34,8 @@ from app.schemas import (
     MessageRead,
     VisualProfileCreate,
     VisualProfileRead,
+    ProviderConfigRead,
+    ProviderConfigUpdate,
 )
 
 
@@ -46,8 +49,8 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.mount("/media", StaticFiles(directory=media_root(settings)), name="media")
-llm_client = LLMClient(settings)
-image_client = ImageGenerationClient(settings)
+llm_client = LLMClient()
+image_client = ImageGenerationClient()
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -178,6 +181,20 @@ def create_memory(character_id: int, payload: MemoryCreate) -> dict:
 def list_memories(character_id: int, limit: int = 50) -> list[dict]:
     _get_character_or_404(character_id)
     return _get_memories(character_id, limit=max(1, min(limit, 200)))
+
+
+@app.get("/providers", response_model=ProviderConfigRead)
+def get_providers() -> dict:
+    return get_provider_settings_payload()
+
+
+@app.put("/providers", response_model=ProviderConfigRead)
+def update_providers(payload: ProviderConfigUpdate) -> dict:
+    if payload.text is not None:
+        save_provider_config("text", payload.text.model_dump(exclude_none=True))
+    if payload.image is not None:
+        save_provider_config("image", payload.image.model_dump(exclude_none=True))
+    return get_provider_settings_payload()
 
 
 @app.post("/characters/{character_id}/visual-profile", response_model=VisualProfileRead)

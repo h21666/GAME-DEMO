@@ -90,6 +90,13 @@ def init_db() -> None:
                 FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS provider_configs (
+                provider_kind TEXT PRIMARY KEY CHECK(provider_kind IN ('text', 'image')),
+                config_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_messages_character_created
                 ON messages(character_id, created_at);
 

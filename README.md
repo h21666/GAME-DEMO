@@ -9,6 +9,8 @@
 - 保存重要对话、用户偏好、关系状态等记忆
 - 支持 OpenAI-compatible LLM API
 - 没有配置 API Key 时，会返回本地开发模式回复，方便先跑通接口
+- 文本默认走 DeepSeek
+- 图片支持玩家自定义接入
 
 ## 项目结构
 
@@ -108,6 +110,8 @@ curl -X POST http://127.0.0.1:8000/characters/1/memories ^
 - `GET /action-templates` 获取固定动作模板
 - `POST /characters/{character_id}/action-pack/generate` 一次生成固定动作包
 - `GET /characters/{character_id}/actions` 获取动作资产
+- `GET /providers` 获取文本和图片 provider 设置
+- `PUT /providers` 更新文本和图片 provider 设置
 - `GET /health` 健康检查
 
 ## Unity Client
@@ -127,6 +131,11 @@ Unity 2D Client 结构在 `unity-client/`，说明见：
 - 主形象图片
 - 动作图片资产
 
-配置 `OPENAI_API_KEY` 后，可以通过 `visual-profile/generate` 生成主形象，再通过 `actions` 生成“喝茶”“看书”等动作。图片会保存在 Backend 的 `media/` 目录，并通过 `/media/...` 提供给 Unity。
+文本默认使用 DeepSeek。你可以通过 `PUT /providers` 保存自己的图片 API 配置，图片会保存在 Backend 的 `media/` 目录，并通过 `/media/...` 提供给 Unity。
+
+当前默认行为：
+
+- 文本：DeepSeek，没填 Key 时回退到本地开发回复
+- 图片：玩家自行接入，没填 Key 时回退到本地占位图
 
 如果你要省成本，建议优先使用 `action-pack/generate` 先批量生成固定动作，游戏内只切换已生成的图，不做每次即时生成。

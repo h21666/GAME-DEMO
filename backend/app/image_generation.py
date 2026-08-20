@@ -1,13 +1,14 @@
 import base64
 import binascii
-from io import BytesIO
 import hashlib
+from io import BytesIO
 from pathlib import Path
 
 import httpx
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.config import Settings, get_settings
+from app.provider_store import get_provider_config
 
 
 class ImageGenerationError(RuntimeError):
@@ -15,9 +16,6 @@ class ImageGenerationError(RuntimeError):
 
 
 class ImageGenerationClient:
-    def __init__(self, settings: Settings | None = None) -> None:
-        self.settings = settings or get_settings()
-
     async def generate(
         self,
         *,
@@ -26,7 +24,9 @@ class ImageGenerationClient:
         reference_filename: str = "reference.png",
         reference_content_type: str = "image/png",
     ) -> bytes:
-        if not self.settings.openai_api_key:
+        config = get_provider_config("image")
+
+        if not config.get("api_key"):
             return self._generate_dev_image(prompt=prompt, reference_image=reference_image)
 
         if reference_image:
@@ -35,24 +35,25 @@ class ImageGenerationClient:
                 image=reference_image,
                 filename=reference_filename,
                 content_type=reference_content_type,
+                config=config,
             )
 
-        return await self._generate_image(prompt)
+        return await self._generate_image(prompt, config=config)
 
-    async def _generate_image(self, prompt: str) -> bytes:
-        url = f"{self.settings.openai_base_url.rstrip('/')}/images/generations"
+    async def _generate_image(self, prompt: str, config: dict) -> bytes:
+        url = f"{config['base_url'].rstrip('/')}{config['generation_path']}"
         data = {
-            "model": self.settings.openai_image_model,
+            "model": config["model"],
             "prompt": prompt,
-            "size": self.settings.image_size,
-            "quality": self.settings.image_quality,
-            "background": self.settings.image_background,
+            "size": config["size"],
+            "quality": config["quality"],
+            "background": config["background"],
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 url,
-                headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
+                headers={"Authorization": f"Bearer {config['api_key']}"},
                 json=data,
             )
 
@@ -65,17 +66,18 @@ class ImageGenerationClient:
         image: bytes,
         filename: str,
         content_type: str,
+        config: dict,
     ) -> bytes:
-        url = f"{self.settings.openai_base_url.rstrip('/')}/images/edits"
+        url = f"{config['base_url'].rstrip('/')}{config['edit_path']}"
         data = {
-            "model": self.settings.openai_image_model,
+            "model": config["model"],
             "prompt": prompt,
-            "size": self.settings.image_size,
-            "quality": self.settings.image_quality,
-            "background": self.settings.image_background,
+            "size": config["size"],
+            "quality": config["quality"],
+            "background": config["background"],
         }
-        if self.settings.openai_image_model.startswith("gpt-image-1"):
-            data["input_fidelity"] = "high"
+        if config.get("input_fidelity"):
+            data["input_fidelity"] = config["input_fidelity"]
         files = {
             "image": (filename, image, content_type),
         }
@@ -83,7 +85,7 @@ class ImageGenerationClient:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 url,
-                headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
+                headers={"Authorization": f"Bearer {config['api_key']}"},
                 data=data,
                 files=files,
             )

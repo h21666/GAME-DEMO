@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from app.config import Settings, get_settings
+from app.provider_store import get_provider_config
 
 
 @dataclass
@@ -12,9 +12,6 @@ class LLMResult:
 
 
 class LLMClient:
-    def __init__(self, settings: Settings | None = None) -> None:
-        self.settings = settings or get_settings()
-
     async def generate_character_reply(
         self,
         *,
@@ -23,7 +20,9 @@ class LLMClient:
         memories: list[dict],
         user_message: str,
     ) -> LLMResult:
-        if not self.settings.openai_api_key:
+        config = get_provider_config("text")
+
+        if not config.get("api_key"):
             return self._generate_dev_reply(character=character, user_message=user_message)
 
         messages = self._build_messages(
@@ -34,15 +33,20 @@ class LLMClient:
         )
 
         payload = {
-            "model": self.settings.llm_model,
+            "model": config["model"],
             "messages": messages,
-            "temperature": self.settings.llm_temperature,
-            "max_tokens": self.settings.llm_max_tokens,
+            "temperature": config["temperature"],
+            "max_tokens": config["max_tokens"],
         }
 
-        url = f"{self.settings.openai_base_url.rstrip('/')}/chat/completions"
+        if config.get("thinking_enabled"):
+            payload["thinking"] = {"type": "enabled"}
+        if config.get("reasoning_effort"):
+            payload["reasoning_effort"] = config["reasoning_effort"]
+
+        url = f"{config['base_url'].rstrip('/')}/chat/completions"
         headers = {
-            "Authorization": f"Bearer {self.settings.openai_api_key}",
+            "Authorization": f"Bearer {config['api_key']}",
             "Content-Type": "application/json",
         }
 
@@ -95,9 +99,8 @@ class LLMClient:
         name = character.get("name", "Character")
         personality = character.get("personality", "thoughtful")
         reply = (
-            f"[Dev Reply - configure OPENAI_API_KEY for real LLM output]\n"
+            f"[Dev Reply - configure DEEPSEEK_API_KEY for real LLM output]\n"
             f"{name}: I heard you say: \"{user_message}\". "
             f"I will respond through my personality: {personality}."
         )
         return LLMResult(reply=reply, used_llm=False)
-
