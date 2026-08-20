@@ -103,3 +103,8 @@ curl -X POST http://127.0.0.1:8000/characters/1/memories ^
 - `GET /characters/{character_id}/memories` 获取角色记忆
 - `GET /health` 健康检查
 
+## Unity Client
+
+Unity 2D Client 结构在 `unity-client/`，说明见：
+
+- [unity-client/README.md](./unity-client/README.md)
