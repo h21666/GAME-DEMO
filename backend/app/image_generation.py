@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.config import Settings, get_settings
 from app.provider_store import get_provider_config
+from app.prompt_defaults import DEFAULT_COMPANION_ROLEPLAY_PROMPT
 
 
 class ImageGenerationError(RuntimeError):
@@ -185,6 +186,7 @@ def build_identity_prompt(
     return "\n".join(
         [
             "Create a consistent fictional adult AI companion character.",
+            DEFAULT_COMPANION_ROLEPLAY_PROMPT,
             f"Character name: {name}.",
             f"Gender presentation: {gender}.",
             f"Age: {age}.",

@@ -1,0 +1,9 @@
+.godot/
+export/
+*.mono
+*.tmp
+*.import
+*.godot/shader_cache/
+*.godot/editor_layout.cfg
+*.godot/uid_cache.bin
+*.godot/mono/

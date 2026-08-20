@@ -58,6 +58,16 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+@app.get("/")
+def root() -> dict:
+    return {
+        "status": "ok",
+        "message": "AIGC Interactive Character Simulator Backend is running.",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.post("/characters", response_model=CharacterRead, status_code=201)
 def create_character(payload: CharacterCreate) -> dict:
     with get_connection() as connection:

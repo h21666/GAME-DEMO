@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.provider_store import get_provider_config
+from app.prompt_defaults import DEFAULT_COMPANION_ROLEPLAY_PROMPT
 
 
 @dataclass
@@ -80,6 +81,7 @@ class LLMClient:
                 "Stay in character and answer as the character, not as an assistant.",
                 "Use the character profile, memories, and conversation history.",
                 "Keep replies natural, emotionally consistent, and concise unless the user asks for detail.",
+                DEFAULT_COMPANION_ROLEPLAY_PROMPT,
                 "",
                 f"Character name: {character['name']}",
                 f"Personality: {character['personality']}",
