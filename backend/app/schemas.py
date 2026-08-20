@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 
 MemoryType = Literal["important_conversation", "user_preference", "relationship"]
+Gender = Literal["female", "male", "non_binary"]
 
 
 class CharacterCreate(BaseModel):
@@ -54,3 +55,34 @@ class MemoryRead(MemoryCreate):
 class HealthResponse(BaseModel):
     status: str
 
+
+class VisualProfileCreate(BaseModel):
+    gender: Gender
+    age: int = Field(..., ge=21, le=34)
+    art_style: str = Field(..., min_length=1, max_length=120)
+    visual_description: str = Field(..., min_length=1, max_length=3000)
+
+
+class VisualProfileRead(VisualProfileCreate):
+    id: int
+    character_id: int
+    identity_prompt: str
+    reference_image_url: str | None = None
+    master_image_url: str | None = None
+    status: Literal["draft", "generating", "ready", "failed"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ActionAssetCreate(BaseModel):
+    action_key: str = Field(..., min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    action_prompt: str = Field(..., min_length=1, max_length=1000)
+
+
+class ActionAssetRead(ActionAssetCreate):
+    id: int
+    character_id: int
+    image_url: str | None = None
+    status: Literal["draft", "generating", "ready", "failed"]
+    created_at: datetime
+    updated_at: datetime

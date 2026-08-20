@@ -101,6 +101,11 @@ curl -X POST http://127.0.0.1:8000/characters/1/memories ^
 - `GET /characters/{character_id}/messages` 获取对话历史
 - `POST /characters/{character_id}/memories` 添加角色记忆
 - `GET /characters/{character_id}/memories` 获取角色记忆
+- `POST /characters/{character_id}/visual-profile` 保存角色视觉设定
+- `GET /characters/{character_id}/visual-profile` 获取角色视觉设定
+- `POST /characters/{character_id}/visual-profile/generate` 上传参考图并生成主形象
+- `POST /characters/{character_id}/actions` 基于主形象生成动作图
+- `GET /characters/{character_id}/actions` 获取动作资产
 - `GET /health` 健康检查
 
 ## Unity Client
@@ -108,3 +113,16 @@ curl -X POST http://127.0.0.1:8000/characters/1/memories ^
 Unity 2D Client 结构在 `unity-client/`，说明见：
 
 - [unity-client/README.md](./unity-client/README.md)
+
+## Character Visual Identity
+
+角色视觉系统会保存：
+
+- 性别与成年年龄
+- 画风
+- 外貌描述
+- 参考图片
+- 主形象图片
+- 动作图片资产
+
+配置 `OPENAI_API_KEY` 后，可以通过 `visual-profile/generate` 生成主形象，再通过 `actions` 生成“喝茶”“看书”等动作。图片会保存在 Backend 的 `media/` 目录，并通过 `/media/...` 提供给 Unity。

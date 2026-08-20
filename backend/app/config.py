@@ -14,10 +14,16 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.8, ge=0.0, le=2.0)
     llm_max_tokens: int = Field(default=500, ge=1, le=4096)
 
+    media_dir: str = "./media"
+    public_base_url: str = "http://127.0.0.1:8000"
+    openai_image_model: str = "gpt-image-1"
+    image_quality: str = "medium"
+    image_size: str = "1024x1024"
+    image_background: str = "opaque"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

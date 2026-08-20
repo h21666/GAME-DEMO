@@ -59,11 +59,45 @@ def init_db() -> None:
                 FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS character_visual_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                character_id INTEGER NOT NULL UNIQUE,
+                gender TEXT NOT NULL CHECK(gender IN ('female', 'male', 'non_binary')),
+                age INTEGER NOT NULL CHECK(age BETWEEN 21 AND 34),
+                art_style TEXT NOT NULL,
+                visual_description TEXT NOT NULL,
+                identity_prompt TEXT NOT NULL,
+                reference_image_path TEXT,
+                master_image_path TEXT,
+                status TEXT NOT NULL DEFAULT 'draft'
+                    CHECK(status IN ('draft', 'generating', 'ready', 'failed')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS character_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                character_id INTEGER NOT NULL,
+                action_key TEXT NOT NULL,
+                action_prompt TEXT NOT NULL,
+                image_path TEXT,
+                status TEXT NOT NULL DEFAULT 'draft'
+                    CHECK(status IN ('draft', 'generating', 'ready', 'failed')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(character_id, action_key),
+                FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_messages_character_created
                 ON messages(character_id, created_at);
 
             CREATE INDEX IF NOT EXISTS idx_memories_character_importance
                 ON memories(character_id, importance DESC, updated_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_actions_character
+                ON character_actions(character_id, updated_at DESC);
             """
         )
 
@@ -72,4 +106,3 @@ def row_to_dict(row: sqlite3.Row | None) -> dict | None:
     if row is None:
         return None
     return dict(row)
-
