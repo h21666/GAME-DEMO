@@ -64,5 +64,51 @@ namespace AIGCCharacterSimulator.Client
     {
         public string status;
     }
-}
 
+    [Serializable]
+    public class TextProviderConfigRead
+    {
+        public string provider_name;
+        public bool api_key_present;
+        public string base_url;
+        public string model;
+        public float temperature;
+        public int max_tokens;
+        public bool thinking_enabled;
+        public string reasoning_effort;
+    }
+
+    [Serializable]
+    public class ImageProviderConfigRead
+    {
+        public string provider_name;
+        public bool api_key_present;
+        public string base_url;
+        public string model;
+        public string generation_path;
+        public string edit_path;
+        public string quality;
+        public string size;
+        public string background;
+        public string input_fidelity;
+    }
+
+    [Serializable]
+    public class ProviderConfigRead
+    {
+        public TextProviderConfigRead text;
+        public ImageProviderConfigRead image;
+    }
+
+    public class ProviderSettingsUpdate
+    {
+        public string deepseekApiKey;
+        public string deepseekBaseUrl;
+        public string deepseekModel;
+        public string imageApiKey;
+        public string imageBaseUrl;
+        public string imageModel;
+        public string imageSize;
+        public string imageQuality;
+    }
+}

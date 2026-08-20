@@ -65,6 +65,61 @@ namespace AIGCCharacterSimulator.Client
             }
         }
 
+        public IEnumerator GetProviders(Action<ProviderConfigRead> onSuccess, Action<string> onError)
+        {
+            using (UnityWebRequest request = UnityWebRequest.Get(BuildUrl("providers")))
+            {
+                request.downloadHandler = new DownloadHandlerBuffer();
+                yield return request.SendWebRequest();
+
+                if (HasError(request))
+                {
+                    onError?.Invoke(FormatError(request));
+                    yield break;
+                }
+
+                ProviderConfigRead response = JsonUtility.FromJson<ProviderConfigRead>(request.downloadHandler.text);
+                if (response == null)
+                {
+                    onError?.Invoke("Failed to parse provider settings.");
+                    yield break;
+                }
+
+                onSuccess?.Invoke(response);
+            }
+        }
+
+        public IEnumerator UpdateProviders(ProviderSettingsUpdate payload, Action<ProviderConfigRead> onSuccess, Action<string> onError)
+        {
+            string json = BuildProviderSettingsJson(payload);
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+
+            using (UnityWebRequest request = new UnityWebRequest(BuildUrl("providers"), "PUT"))
+            {
+                request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.SetRequestHeader("Accept", "application/json");
+
+                yield return request.SendWebRequest();
+
+                if (HasError(request))
+                {
+                    onError?.Invoke(FormatError(request));
+                    yield break;
+                }
+
+                ProviderConfigRead response = JsonUtility.FromJson<ProviderConfigRead>(request.downloadHandler.text);
+                if (response == null)
+                {
+                    onError?.Invoke("Failed to parse provider update response.");
+                    yield break;
+                }
+
+                onSuccess?.Invoke(response);
+            }
+        }
+
         public IEnumerator GetCharacter(int characterId, Action<CharacterDto> onSuccess, Action<string> onError)
         {
             using (UnityWebRequest request = UnityWebRequest.Get(BuildUrl("characters/" + characterId)))
@@ -195,6 +250,63 @@ namespace AIGCCharacterSimulator.Client
             return NormalizeBaseUrl(baseUrl) + "/" + normalizedPath;
         }
 
+        private static string BuildProviderSettingsJson(ProviderSettingsUpdate payload)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.Append("{\"text\":{");
+            bool wroteText = false;
+            AppendJsonProperty(builder, "api_key", payload.deepseekApiKey, ref wroteText, true);
+            AppendJsonProperty(builder, "base_url", payload.deepseekBaseUrl, ref wroteText, false);
+            AppendJsonProperty(builder, "model", payload.deepseekModel, ref wroteText, false);
+            builder.Append("},\"image\":{");
+            bool wroteImage = false;
+            AppendJsonProperty(builder, "api_key", payload.imageApiKey, ref wroteImage, true);
+            AppendJsonProperty(builder, "base_url", payload.imageBaseUrl, ref wroteImage, false);
+            AppendJsonProperty(builder, "model", payload.imageModel, ref wroteImage, false);
+            AppendJsonProperty(builder, "size", payload.imageSize, ref wroteImage, false);
+            AppendJsonProperty(builder, "quality", payload.imageQuality, ref wroteImage, false);
+            builder.Append("}}");
+            return builder.ToString();
+        }
+
+        private static void AppendJsonProperty(StringBuilder builder, string key, string value, ref bool wroteAny, bool omitWhenEmpty)
+        {
+            if (omitWhenEmpty && string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (!wroteAny)
+            {
+                wroteAny = true;
+            }
+            else
+            {
+                builder.Append(",");
+            }
+
+            builder.Append("\"");
+            builder.Append(EscapeJson(key));
+            builder.Append("\":\"");
+            builder.Append(EscapeJson(value == null ? string.Empty : value.Trim()));
+            builder.Append("\"");
+        }
+
+        private static string EscapeJson(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\n", "\\n")
+                .Replace("\r", "\\r")
+                .Replace("\t", "\\t");
+        }
+
         private static string NormalizeBaseUrl(string value)
         {
             if (string.IsNullOrEmpty(value))
@@ -226,4 +338,3 @@ namespace AIGCCharacterSimulator.Client
         }
     }
 }
-

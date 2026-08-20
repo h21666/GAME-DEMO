@@ -26,6 +26,16 @@ namespace AIGCCharacterSimulator.Client
         private InputField characterBackgroundInput;
         private InputField characterMemoryInput;
 
+        private Text providerStatusText;
+        private InputField deepseekApiKeyInput;
+        private InputField deepseekBaseUrlInput;
+        private InputField deepseekModelInput;
+        private InputField imageApiKeyInput;
+        private InputField imageBaseUrlInput;
+        private InputField imageModelInput;
+        private InputField imageSizeInput;
+        private InputField imageQualityInput;
+
         private Transform characterListContent;
         private Text selectedCharacterPreviewText;
         private Button openChatButton;
@@ -130,6 +140,7 @@ namespace AIGCCharacterSimulator.Client
             rightLayout.flexibleHeight = 1f;
             UiFactory.CreateVerticalLayout(rightColumn.transform, 14, new RectOffset(16, 16, 16, 16));
 
+            BuildProviderSettingsCard(rightColumn.transform);
             BuildCharacterBrowserCard(rightColumn.transform);
             BuildSelectedCharacterCard(rightColumn.transform);
         }
@@ -173,6 +184,59 @@ namespace AIGCCharacterSimulator.Client
 
             Button fillButton = UiFactory.CreateButton(buttonRow.transform, "Demo Fill", new Color(0.28f, 0.32f, 0.38f, 1f), Color.white);
             fillButton.onClick.AddListener(FillDemoCharacterForm);
+        }
+
+        private void BuildProviderSettingsCard(Transform parent)
+        {
+            GameObject card = UiFactory.CreateCard("ProviderSettingsCard", parent, new Color(0.13f, 0.15f, 0.20f, 1f));
+            LayoutElement layout = card.GetComponent<LayoutElement>();
+            layout.preferredHeight = 355f;
+            UiFactory.CreateVerticalLayout(card.transform, 8, new RectOffset(14, 14, 14, 14));
+
+            GameObject titleRow = UiFactory.CreatePanel("ProviderTitleRow", card.transform, new Color(0f, 0f, 0f, 0f));
+            UiFactory.CreateHorizontalLayout(titleRow.transform, 8, new RectOffset(0, 0, 0, 0));
+            UiFactory.CreateSectionTitle(titleRow.transform, "Provider Settings");
+            providerStatusText = UiFactory.CreateMutedText(titleRow.transform, "Not loaded");
+            LayoutElement providerStatusLayout = providerStatusText.GetComponent<LayoutElement>();
+            providerStatusLayout.flexibleWidth = 1f;
+            providerStatusText.alignment = TextAnchor.MiddleRight;
+
+            GameObject columns = UiFactory.CreatePanel("ProviderColumns", card.transform, new Color(0f, 0f, 0f, 0f));
+            LayoutElement columnsLayout = columns.GetComponent<LayoutElement>();
+            columnsLayout.flexibleHeight = 1f;
+            UiFactory.CreateHorizontalLayout(columns.transform, 10, new RectOffset(0, 0, 0, 0));
+
+            GameObject textColumn = UiFactory.CreateCard("TextProviderColumn", columns.transform, new Color(0.10f, 0.12f, 0.16f, 1f));
+            LayoutElement textColumnLayout = textColumn.GetComponent<LayoutElement>();
+            textColumnLayout.flexibleWidth = 1f;
+            UiFactory.CreateVerticalLayout(textColumn.transform, 6, new RectOffset(10, 10, 10, 10));
+            Text textTitle = UiFactory.CreateMutedText(textColumn.transform, "DeepSeek Text");
+            textTitle.fontStyle = FontStyle.Bold;
+            deepseekApiKeyInput = UiFactory.CreateInputField(textColumn.transform, "API Key (blank keeps current)", false);
+            deepseekBaseUrlInput = UiFactory.CreateInputField(textColumn.transform, "https://api.deepseek.com", false);
+            deepseekModelInput = UiFactory.CreateInputField(textColumn.transform, "deepseek-v4-pro", false);
+
+            GameObject imageColumn = UiFactory.CreateCard("ImageProviderColumn", columns.transform, new Color(0.10f, 0.12f, 0.16f, 1f));
+            LayoutElement imageColumnLayout = imageColumn.GetComponent<LayoutElement>();
+            imageColumnLayout.flexibleWidth = 1f;
+            UiFactory.CreateVerticalLayout(imageColumn.transform, 6, new RectOffset(10, 10, 10, 10));
+            Text imageTitle = UiFactory.CreateMutedText(imageColumn.transform, "Image API");
+            imageTitle.fontStyle = FontStyle.Bold;
+            imageApiKeyInput = UiFactory.CreateInputField(imageColumn.transform, "API Key (blank keeps current)", false);
+            imageBaseUrlInput = UiFactory.CreateInputField(imageColumn.transform, "https://api.openai.com/v1", false);
+            imageModelInput = UiFactory.CreateInputField(imageColumn.transform, "gpt-image-1", false);
+            imageSizeInput = UiFactory.CreateInputField(imageColumn.transform, "1024x1024", false);
+            imageQualityInput = UiFactory.CreateInputField(imageColumn.transform, "medium", false);
+
+            GameObject buttonRow = UiFactory.CreatePanel("ProviderButtonRow", card.transform, new Color(0f, 0f, 0f, 0f));
+            LayoutElement buttonRowLayout = buttonRow.GetComponent<LayoutElement>();
+            buttonRowLayout.preferredHeight = 42f;
+            UiFactory.CreateHorizontalLayout(buttonRow.transform, 8, new RectOffset(0, 0, 0, 0));
+
+            Button reloadButton = UiFactory.CreateButton(buttonRow.transform, "Reload Settings", new Color(0.28f, 0.32f, 0.38f, 1f), Color.white);
+            reloadButton.onClick.AddListener(LoadProviderSettings);
+            Button saveButton = UiFactory.CreateButton(buttonRow.transform, "Save Settings", new Color(0.29f, 0.55f, 0.94f, 1f), Color.white);
+            saveButton.onClick.AddListener(SaveProviderSettings);
         }
 
         private void BuildCharacterBrowserCard(Transform parent)
@@ -309,7 +373,94 @@ namespace AIGCCharacterSimulator.Client
                 SetStatus("Backend online: " + apiClient.BaseUrl);
             }
 
+            yield return LoadProviderSettingsRoutine();
             yield return RefreshCharactersRoutine();
+        }
+
+        private IEnumerator LoadProviderSettingsRoutine()
+        {
+            if (providerStatusText != null)
+            {
+                providerStatusText.text = "Loading...";
+            }
+
+            string error = null;
+            ProviderConfigRead providers = null;
+
+            yield return apiClient.GetProviders(
+                delegate (ProviderConfigRead response)
+                {
+                    providers = response;
+                },
+                delegate (string message)
+                {
+                    error = message;
+                });
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                if (providerStatusText != null)
+                {
+                    providerStatusText.text = "Load failed";
+                }
+                SetStatus("Provider settings load failed: " + error);
+                yield break;
+            }
+
+            ApplyProviderSettings(providers);
+            if (providerStatusText != null)
+            {
+                providerStatusText.text = BuildProviderStatus(providers);
+            }
+        }
+
+        private IEnumerator SaveProviderSettingsRoutine()
+        {
+            if (providerStatusText != null)
+            {
+                providerStatusText.text = "Saving...";
+            }
+
+            ProviderSettingsUpdate payload = new ProviderSettingsUpdate();
+            payload.deepseekApiKey = deepseekApiKeyInput != null ? deepseekApiKeyInput.text.Trim() : string.Empty;
+            payload.deepseekBaseUrl = deepseekBaseUrlInput != null ? deepseekBaseUrlInput.text.Trim() : string.Empty;
+            payload.deepseekModel = deepseekModelInput != null ? deepseekModelInput.text.Trim() : string.Empty;
+            payload.imageApiKey = imageApiKeyInput != null ? imageApiKeyInput.text.Trim() : string.Empty;
+            payload.imageBaseUrl = imageBaseUrlInput != null ? imageBaseUrlInput.text.Trim() : string.Empty;
+            payload.imageModel = imageModelInput != null ? imageModelInput.text.Trim() : string.Empty;
+            payload.imageSize = imageSizeInput != null ? imageSizeInput.text.Trim() : string.Empty;
+            payload.imageQuality = imageQualityInput != null ? imageQualityInput.text.Trim() : string.Empty;
+
+            string error = null;
+            ProviderConfigRead providers = null;
+
+            yield return apiClient.UpdateProviders(
+                payload,
+                delegate (ProviderConfigRead response)
+                {
+                    providers = response;
+                },
+                delegate (string message)
+                {
+                    error = message;
+                });
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                if (providerStatusText != null)
+                {
+                    providerStatusText.text = "Save failed";
+                }
+                SetStatus("Provider settings save failed: " + error);
+                yield break;
+            }
+
+            ApplyProviderSettings(providers);
+            if (providerStatusText != null)
+            {
+                providerStatusText.text = BuildProviderStatus(providers);
+            }
+            SetStatus("Provider settings saved.");
         }
 
         private IEnumerator RefreshCharactersRoutine()
@@ -774,6 +925,16 @@ namespace AIGCCharacterSimulator.Client
             StartCoroutine(CreateCharacterRoutine());
         }
 
+        private void LoadProviderSettings()
+        {
+            StartCoroutine(LoadProviderSettingsRoutine());
+        }
+
+        private void SaveProviderSettings()
+        {
+            StartCoroutine(SaveProviderSettingsRoutine());
+        }
+
         private void FillDemoCharacterForm()
         {
             if (characterNameInput != null)
@@ -834,6 +995,66 @@ namespace AIGCCharacterSimulator.Client
             }
 
             return null;
+        }
+
+        private void ApplyProviderSettings(ProviderConfigRead providers)
+        {
+            if (providers == null)
+            {
+                return;
+            }
+
+            if (providers.text != null)
+            {
+                if (deepseekApiKeyInput != null)
+                {
+                    deepseekApiKeyInput.text = string.Empty;
+                }
+                if (deepseekBaseUrlInput != null)
+                {
+                    deepseekBaseUrlInput.text = providers.text.base_url;
+                }
+                if (deepseekModelInput != null)
+                {
+                    deepseekModelInput.text = providers.text.model;
+                }
+            }
+
+            if (providers.image != null)
+            {
+                if (imageApiKeyInput != null)
+                {
+                    imageApiKeyInput.text = string.Empty;
+                }
+                if (imageBaseUrlInput != null)
+                {
+                    imageBaseUrlInput.text = providers.image.base_url;
+                }
+                if (imageModelInput != null)
+                {
+                    imageModelInput.text = providers.image.model;
+                }
+                if (imageSizeInput != null)
+                {
+                    imageSizeInput.text = providers.image.size;
+                }
+                if (imageQualityInput != null)
+                {
+                    imageQualityInput.text = providers.image.quality;
+                }
+            }
+        }
+
+        private static string BuildProviderStatus(ProviderConfigRead providers)
+        {
+            if (providers == null || providers.text == null || providers.image == null)
+            {
+                return "Not loaded";
+            }
+
+            string textStatus = providers.text.api_key_present ? "Text key set" : "Text dev";
+            string imageStatus = providers.image.api_key_present ? "Image key set" : "Image dev";
+            return textStatus + " / " + imageStatus;
         }
 
         private static string BuildCharacterSummary(CharacterDto character)

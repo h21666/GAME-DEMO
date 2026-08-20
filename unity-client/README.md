@@ -32,6 +32,7 @@ unity-client/
 ## 运行后的流程
 
 - 在主菜单输入 Backend 地址
+- 在 Provider Settings 填 DeepSeek 和图片 API 配置
 - 点击 Connect
 - 角色列表会从 FastAPI 读取
 - 选中角色后进入聊天界面
@@ -42,9 +43,9 @@ unity-client/
 
 - 这个版本不依赖额外 JSON 插件，直接使用 Unity 自带的 `JsonUtility`
 - UI 是运行时动态生成的，不需要先手工搭复杂 Canvas
+- API Key 输入框留空会保留后端已有配置，不会从接口明文读回
 - 如果你想要下一阶段，我可以继续补：
   - 角色创建表单
   - 对话气泡美化
   - 记忆编辑
   - 场景化 Unity UI 预制体
-
