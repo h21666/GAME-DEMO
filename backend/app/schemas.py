@@ -86,3 +86,18 @@ class ActionAssetRead(ActionAssetCreate):
     status: Literal["draft", "generating", "ready", "failed"]
     created_at: datetime
     updated_at: datetime
+
+
+class ActionTemplateRead(BaseModel):
+    action_key: str
+    action_name: str
+    action_prompt: str
+
+
+class ActionPackGenerateRequest(BaseModel):
+    regenerate: bool = False
+
+
+class ActionPackGenerateResponse(BaseModel):
+    character_id: int
+    actions: list[ActionAssetRead]

@@ -6,6 +6,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+from app.action_templates import DEFAULT_ACTION_TEMPLATES
 from app.database import get_connection, init_db, row_to_dict
 from app.image_generation import (
     ImageGenerationClient,
@@ -19,6 +20,9 @@ from app.llm import LLMClient
 from app.schemas import (
     ActionAssetCreate,
     ActionAssetRead,
+    ActionPackGenerateRequest,
+    ActionPackGenerateResponse,
+    ActionTemplateRead,
     CharacterCreate,
     CharacterRead,
     ChatRequest,
@@ -354,6 +358,74 @@ async def generate_action_asset(
     return _serialize_action_asset(action)
 
 
+@app.get("/action-templates", response_model=list[ActionTemplateRead])
+def list_action_templates() -> list[ActionTemplateRead]:
+    return [
+        ActionTemplateRead(
+            action_key=item.action_key,
+            action_name=item.action_name,
+            action_prompt=item.action_prompt,
+        )
+        for item in DEFAULT_ACTION_TEMPLATES
+    ]
+
+
+@app.post("/characters/{character_id}/action-pack/generate", response_model=ActionPackGenerateResponse)
+async def generate_action_pack(
+    character_id: int,
+    payload: ActionPackGenerateRequest | None = None,
+) -> dict:
+    _get_character_or_404(character_id)
+    profile = _get_visual_profile_or_404(character_id)
+    reference_path = profile.get("master_image_path") or profile.get("reference_image_path")
+    if not reference_path:
+        raise HTTPException(
+            status_code=409,
+            detail="Generate a master character image before generating an action pack.",
+        )
+
+    reference_file = media_root(settings) / reference_path
+    if not reference_file.exists():
+        raise HTTPException(status_code=404, detail="Character reference image file not found.")
+
+    regenerate = bool(payload.regenerate) if payload is not None else False
+    results: list[dict] = []
+
+    for template in DEFAULT_ACTION_TEMPLATES:
+        existing = _get_action_if_exists(character_id, template.action_key)
+        if existing is not None and not regenerate and existing.get("status") == "ready":
+            results.append(_serialize_action_asset(existing))
+            continue
+
+        action_payload = ActionAssetCreate(
+            action_key=template.action_key,
+            action_prompt=template.action_prompt,
+        )
+        _upsert_action_asset(character_id, action_payload, status="generating")
+
+        action_prompt = build_action_prompt(profile["identity_prompt"], template.action_prompt)
+
+        try:
+            generated_image = await image_client.generate(
+                prompt=action_prompt,
+                reference_image=reference_file.read_bytes(),
+                reference_filename=Path(reference_path).name,
+            )
+            image_path = save_media(
+                relative_path=f"characters/{character_id}/actions/{template.action_key}.png",
+                content=generated_image,
+            )
+        except ImageGenerationError as exc:
+            _set_action_status(character_id, template.action_key, "failed")
+            raise HTTPException(status_code=502, detail=f"{template.action_key}: {exc}") from exc
+
+        _update_action_asset(character_id, template.action_key, image_path)
+        action = _get_action_or_404(character_id, template.action_key)
+        results.append(_serialize_action_asset(action))
+
+    return ActionPackGenerateResponse(character_id=character_id, actions=results)
+
+
 @app.get("/characters/{character_id}/actions", response_model=list[ActionAssetRead])
 def list_action_assets(character_id: int) -> list[dict]:
     _get_character_or_404(character_id)
@@ -557,3 +629,27 @@ def _get_action_or_404(character_id: int, action_key: str) -> dict:
 def _serialize_action_asset(action: dict) -> dict:
     action["image_url"] = public_media_url(action.get("image_path"))
     return action
+
+
+def _get_action_if_exists(character_id: int, action_key: str) -> dict | None:
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT * FROM character_actions
+            WHERE character_id = ? AND action_key = ?
+            """,
+            (character_id, action_key),
+        ).fetchone()
+    return row_to_dict(row)
+
+
+def build_action_prompt(identity_prompt: str, action_prompt: str) -> str:
+    return "\n".join(
+        [
+            identity_prompt,
+            f"Action: {action_prompt}.",
+            "Preserve the same facial identity, hairstyle, body shape, art style, and outfit language.",
+            "Keep the character adult, consistent, and clearly recognizable.",
+            "Compose a polished single-character image with no text, watermark, or logo.",
+        ]
+    )

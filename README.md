@@ -105,6 +105,8 @@ curl -X POST http://127.0.0.1:8000/characters/1/memories ^
 - `GET /characters/{character_id}/visual-profile` 获取角色视觉设定
 - `POST /characters/{character_id}/visual-profile/generate` 上传参考图并生成主形象
 - `POST /characters/{character_id}/actions` 基于主形象生成动作图
+- `GET /action-templates` 获取固定动作模板
+- `POST /characters/{character_id}/action-pack/generate` 一次生成固定动作包
 - `GET /characters/{character_id}/actions` 获取动作资产
 - `GET /health` 健康检查
 
@@ -126,3 +128,5 @@ Unity 2D Client 结构在 `unity-client/`，说明见：
 - 动作图片资产
 
 配置 `OPENAI_API_KEY` 后，可以通过 `visual-profile/generate` 生成主形象，再通过 `actions` 生成“喝茶”“看书”等动作。图片会保存在 Backend 的 `media/` 目录，并通过 `/media/...` 提供给 Unity。
+
+如果你要省成本，建议优先使用 `action-pack/generate` 先批量生成固定动作，游戏内只切换已生成的图，不做每次即时生成。

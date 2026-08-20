@@ -1,8 +1,11 @@
 import base64
 import binascii
+from io import BytesIO
+import hashlib
 from pathlib import Path
 
 import httpx
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.config import Settings, get_settings
 
@@ -24,7 +27,7 @@ class ImageGenerationClient:
         reference_content_type: str = "image/png",
     ) -> bytes:
         if not self.settings.openai_api_key:
-            raise ImageGenerationError("OPENAI_API_KEY is not configured.")
+            return self._generate_dev_image(prompt=prompt, reference_image=reference_image)
 
         if reference_image:
             return await self._edit_image(
@@ -71,6 +74,8 @@ class ImageGenerationClient:
             "quality": self.settings.image_quality,
             "background": self.settings.image_background,
         }
+        if self.settings.openai_image_model.startswith("gpt-image-1"):
+            data["input_fidelity"] = "high"
         files = {
             "image": (filename, image, content_type),
         }
@@ -112,6 +117,59 @@ class ImageGenerationClient:
             )
 
         raise ImageGenerationError("Image API response did not contain an image.")
+
+    def _generate_dev_image(self, *, prompt: str, reference_image: bytes | None = None) -> bytes:
+        seed = hashlib.sha256(prompt.encode("utf-8")).digest()
+        primary = (seed[0], seed[1], seed[2], 255)
+        secondary = (min(seed[0] + 48, 255), min(seed[1] + 48, 255), min(seed[2] + 48, 255), 255)
+        accent = (seed[3], seed[4], seed[5], 255)
+
+        canvas = Image.new("RGBA", (1024, 1024), primary)
+        draw = ImageDraw.Draw(canvas)
+
+        for y in range(1024):
+            ratio = y / 1023.0
+            r = int(primary[0] * (1 - ratio) + secondary[0] * ratio)
+            g = int(primary[1] * (1 - ratio) + secondary[1] * ratio)
+            b = int(primary[2] * (1 - ratio) + secondary[2] * ratio)
+            draw.line((0, y, 1023, y), fill=(r, g, b, 255))
+
+        if reference_image:
+            try:
+                ref = Image.open(BytesIO(reference_image)).convert("RGBA")
+                ref = ImageOps.fit(ref, (1024, 1024))
+                overlay = Image.new("RGBA", (1024, 1024), (*accent[:3], 80))
+                ref = Image.alpha_composite(ref, overlay)
+                canvas = Image.blend(ref, canvas, 0.35)
+            except Exception:
+                pass
+
+        overlay = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.ellipse((250, 120, 774, 644), fill=(*accent[:3], 38))
+        overlay_draw.rounded_rectangle((290, 540, 734, 920), radius=180, fill=(255, 255, 255, 32))
+        overlay_draw.rounded_rectangle((340, 680, 684, 860), radius=120, fill=(255, 255, 255, 48))
+        overlay_draw.polygon([(512, 180), (560, 260), (464, 260)], fill=(255, 255, 255, 32))
+        canvas = Image.alpha_composite(canvas, overlay)
+
+        label_draw = ImageDraw.Draw(canvas)
+        label = "DEV MODE"
+        sublabel = prompt[:72]
+        try:
+            font_large = ImageFont.truetype("arial.ttf", 44)
+            font_small = ImageFont.truetype("arial.ttf", 24)
+        except Exception:
+            font_large = None
+            font_small = None
+
+        label_draw.rounded_rectangle((48, 48, 976, 168), radius=28, fill=(0, 0, 0, 90))
+        label_draw.text((76, 72), label, fill=(255, 255, 255, 255), font=font_large)
+        label_draw.text((76, 124), sublabel, fill=(235, 240, 245, 220), font=font_small)
+
+        canvas = canvas.filter(ImageFilter.SMOOTH)
+        buffer = BytesIO()
+        canvas.convert("RGBA").save(buffer, format="PNG")
+        return buffer.getvalue()
 
 
 def build_identity_prompt(
