@@ -1,4 +1,4 @@
-# AIGC Interactive Character Simulator Backend
+# AI Interactive Character Simulator Backend
 
 第一阶段只实现 Backend：角色系统、聊天接口、记忆系统，以及基于 SQLite 的本地存储。
 
