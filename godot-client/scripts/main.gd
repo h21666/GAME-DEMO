@@ -1504,8 +1504,8 @@ func _ensure_placeholder_portrait() -> Texture2D:
 			var ny := (float(y) - 390.0) / 294.0
 			var distance := nx * nx + ny * ny
 			if distance < 1.0:
-				var glow := clamp(1.0 - distance, 0.0, 1.0)
-				var current := image.get_pixel(x, y)
+				var glow: float = clampf(1.0 - distance, 0.0, 1.0)
+				var current: Color = image.get_pixel(x, y)
 				image.set_pixel(x, y, current.lerp(Color(0.36, 0.82, 0.90, 0.90), glow * 0.46))
 
 	for y in range(130, 330):
@@ -2542,7 +2542,7 @@ func _generate_action_pack() -> void:
 func _build_form_body(payload: Dictionary) -> String:
 	var parts: Array[String] = []
 	for key in payload.keys():
-		var value := payload[key]
+		var value: Variant = payload[key]
 		parts.append("%s=%s" % [str(key).uri_encode(), str(value).uri_encode()])
 	return "&".join(parts)
 
