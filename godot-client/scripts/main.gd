@@ -36,6 +36,9 @@ var immersive_name_label: Label
 var immersive_role_label: Label
 var immersive_reply_text: RichTextLabel
 var immersive_input: LineEdit
+var schedule_overlay: Control
+var schedule_close_button: Button
+var schedule_summary: RichTextLabel
 var backend_url_edit: LineEdit
 var connect_button: Button
 var companion_gender_option: OptionButton
@@ -75,11 +78,28 @@ var menu_home_button: Button
 var menu_chat_button: Button
 var menu_settings_button: Button
 var menu_continue_story_button: Button
+var schedule_day_label: Label
+var schedule_period_label: Label
+var schedule_stats_label: Label
+var schedule_hint_label: RichTextLabel
+var schedule_last_action_label: Label
+var schedule_work_button: Button
+var schedule_study_button: Button
+var schedule_stroll_button: Button
+var schedule_gift_button: Button
+var schedule_home_button: Button
 var character_count_label: Label
 var chat_tab_index: int = 0
 var home_tab_index: int = 0
 var settings_tab_index: int = 0
 var story_waiting_for_gameplay: bool = false
+var schedule_day: int = 1
+var schedule_period: int = 0
+var schedule_pending_rollover: bool = false
+var schedule_money: int = 120
+var schedule_study_points: int = 0
+var schedule_relationship: int = 0
+var schedule_last_action: String = "今天还没有安排。"
 
 
 func _ready() -> void:
@@ -178,6 +198,11 @@ func _build_ui() -> void:
 	)
 	sidebar_box.add_child(menu_settings_button)
 
+	var schedule_button := _make_menu_button("日程", func() -> void:
+		_show_schedule_overlay()
+	)
+	sidebar_box.add_child(schedule_button)
+
 	menu_continue_story_button = _make_menu_button("回到出租屋", func() -> void:
 		_complete_current_gameplay_step()
 	)
@@ -236,6 +261,7 @@ func _build_ui() -> void:
 	_build_settings_tab(settings_tab)
 	_build_chat_tab(chat_tab)
 	_build_story_overlay()
+	_build_schedule_overlay()
 	_build_shop_overlay()
 	_build_immersive_overlay()
 	_initialize_story()
@@ -652,6 +678,127 @@ func _build_story_overlay() -> void:
 		_advance_story()
 	)
 	button_row.add_child(story_continue_button)
+
+
+func _build_schedule_overlay() -> void:
+	schedule_overlay = Control.new()
+	schedule_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	schedule_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	schedule_overlay.visible = false
+	add_child(schedule_overlay)
+
+	var shade := ColorRect.new()
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.0, 0.0, 0.0, 0.24)
+	schedule_overlay.add_child(shade)
+
+	var panel_margin := MarginContainer.new()
+	panel_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel_margin.add_theme_constant_override("margin_left", 110)
+	panel_margin.add_theme_constant_override("margin_right", 110)
+	panel_margin.add_theme_constant_override("margin_top", 92)
+	panel_margin.add_theme_constant_override("margin_bottom", 92)
+	schedule_overlay.add_child(panel_margin)
+
+	var panel := PanelContainer.new()
+	_decorate_panel(panel, Color(0.045, 0.055, 0.070, 0.94), Color(0.42, 0.78, 0.86, 0.9))
+	panel_margin.add_child(panel)
+
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 14)
+	panel.add_child(_with_padding(root, 22))
+
+	var heading := HBoxContainer.new()
+	heading.add_theme_constant_override("separation", 12)
+	root.add_child(heading)
+
+	var title_box := VBoxContainer.new()
+	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_box.add_theme_constant_override("separation", 4)
+	heading.add_child(title_box)
+
+	var title := Label.new()
+	title.text = "今日安排"
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 1.0))
+	title_box.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "白天安排主角生活，晚上回出租屋和她互动。"
+	subtitle.add_theme_color_override("font_color", Color(0.72, 0.80, 0.86, 1.0))
+	title_box.add_child(subtitle)
+
+	schedule_close_button = _make_button("关闭", func() -> void:
+		_hide_schedule_overlay()
+	)
+	heading.add_child(schedule_close_button)
+
+	var stat_row := HBoxContainer.new()
+	stat_row.add_theme_constant_override("separation", 12)
+	root.add_child(stat_row)
+
+	schedule_day_label = _make_schedule_badge("第 1 天")
+	stat_row.add_child(schedule_day_label)
+	schedule_period_label = _make_schedule_badge("早上")
+	stat_row.add_child(schedule_period_label)
+	schedule_stats_label = _make_schedule_badge("资金 120 / 调参 0 / 关系 0")
+	schedule_stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stat_row.add_child(schedule_stats_label)
+
+	schedule_summary = RichTextLabel.new()
+	schedule_summary.bbcode_enabled = true
+	schedule_summary.fit_content = true
+	schedule_summary.scroll_active = false
+	schedule_summary.custom_minimum_size = Vector2(0, 92)
+	schedule_summary.add_theme_font_size_override("normal_font_size", 17)
+	root.add_child(schedule_summary)
+
+	var action_grid := GridContainer.new()
+	action_grid.columns = 2
+	action_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_grid.add_theme_constant_override("h_separation", 12)
+	action_grid.add_theme_constant_override("v_separation", 12)
+	root.add_child(action_grid)
+
+	schedule_work_button = _make_button("打工", func() -> void:
+		await _perform_day_action("work")
+	)
+	action_grid.add_child(schedule_work_button)
+
+	schedule_study_button = _make_button("学习 AI 调参", func() -> void:
+		await _perform_day_action("study")
+	)
+	action_grid.add_child(schedule_study_button)
+
+	schedule_stroll_button = _make_button("逛街", func() -> void:
+		await _perform_day_action("stroll")
+	)
+	action_grid.add_child(schedule_stroll_button)
+
+	schedule_gift_button = _make_button("买礼物", func() -> void:
+		await _perform_day_action("gift")
+	)
+	action_grid.add_child(schedule_gift_button)
+
+	schedule_last_action_label = Label.new()
+	schedule_last_action_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	schedule_last_action_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.91, 1.0))
+	root.add_child(schedule_last_action_label)
+
+	schedule_hint_label = RichTextLabel.new()
+	schedule_hint_label.bbcode_enabled = true
+	schedule_hint_label.fit_content = true
+	schedule_hint_label.scroll_active = false
+	schedule_hint_label.custom_minimum_size = Vector2(0, 72)
+	schedule_hint_label.add_theme_font_size_override("normal_font_size", 16)
+	root.add_child(schedule_hint_label)
+
+	schedule_home_button = _make_button("回家见她", func() -> void:
+		await _go_home_from_schedule()
+	)
+	root.add_child(schedule_home_button)
+
+	_update_schedule_ui()
 
 
 func _build_shop_overlay() -> void:
@@ -1083,6 +1230,17 @@ func _make_help_text(text: String) -> Label:
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_color_override("font_color", Color(0.72, 0.76, 0.82))
+	return label
+
+
+func _make_schedule_badge(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(0, 38)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 1.0))
 	return label
 
 
@@ -1561,6 +1719,8 @@ func _show_immersive_chat() -> void:
 		return
 	if shop_overlay:
 		shop_overlay.visible = false
+	if schedule_overlay:
+		schedule_overlay.visible = false
 	if not story_complete and not story_waiting_for_gameplay:
 		story_complete = true
 
@@ -1569,6 +1729,8 @@ func _show_immersive_chat() -> void:
 	_set_gameplay_visible(false)
 	if tab_container:
 		tab_container.visible = false
+	if schedule_period == 2:
+		schedule_pending_rollover = true
 	if immersive_overlay:
 		immersive_overlay.visible = true
 	if immersive_name_label:
@@ -1592,6 +1754,10 @@ func _hide_immersive_chat() -> void:
 	if tab_container:
 		tab_container.visible = true
 	_set_gameplay_visible(true)
+	if schedule_pending_rollover:
+		_advance_schedule_day()
+		schedule_last_action = "夜晚结束了，明天再继续陪伴。"
+		_update_schedule_ui()
 	_show_page(chat_tab_index)
 	_set_status("已返回普通对话界面。")
 
@@ -1669,6 +1835,168 @@ func _hide_shop_overlay() -> void:
 	if shop_overlay:
 		shop_overlay.visible = false
 	_set_gameplay_visible(true)
+
+
+func _show_schedule_overlay() -> void:
+	if not story_complete:
+		_set_status("先完成序章，再安排日程。")
+		return
+	if shop_overlay:
+		shop_overlay.visible = false
+	if immersive_overlay:
+		immersive_overlay.visible = false
+	if schedule_overlay:
+		schedule_overlay.visible = true
+	background_image_rect.texture = load("res://assets/backgrounds/home.png")
+	background_tint.color = Color(0.02, 0.025, 0.03, 0.34)
+	_set_gameplay_visible(false)
+	_update_schedule_ui()
+
+
+func _hide_schedule_overlay() -> void:
+	if schedule_overlay:
+		schedule_overlay.visible = false
+	_set_gameplay_visible(true)
+
+
+func _format_schedule_period() -> String:
+	match schedule_period:
+		0:
+			return "早上"
+		1:
+			return "下午"
+		_:
+			return "晚上"
+
+
+func _update_schedule_ui() -> void:
+	if schedule_day_label:
+		schedule_day_label.text = "第 %d 天" % schedule_day
+	if schedule_period_label:
+		schedule_period_label.text = _format_schedule_period()
+	if schedule_stats_label:
+		schedule_stats_label.text = "资金 %d / 调参 %d / 关系 %d" % [schedule_money, schedule_study_points, schedule_relationship]
+	if schedule_last_action_label:
+		schedule_last_action_label.text = schedule_last_action
+	if schedule_summary:
+		schedule_summary.clear()
+		schedule_summary.append_text(
+			"[b]白天行动[/b]\n"
+			+ "早上和下午可以安排工作、学习、逛街和买礼物。\n"
+			+ "晚上回家后再和她互动，第二天会重新开始。"
+		)
+	if schedule_hint_label:
+		var hint := ""
+		if schedule_period == 0:
+			hint = "现在是早上，适合打工、学习 AI 调参，或去街上看看礼物。"
+		elif schedule_period == 1:
+			hint = "现在是下午，可以继续白天安排，再把故事推进到夜晚。"
+		else:
+			hint = "现在是晚上，回出租屋和她互动最合适。"
+		schedule_hint_label.clear()
+		schedule_hint_label.append_text(_escape_bbcode(hint))
+
+	var day_phase_open := schedule_period < 2
+	if schedule_work_button:
+		schedule_work_button.disabled = not day_phase_open
+	if schedule_study_button:
+		schedule_study_button.disabled = not day_phase_open
+	if schedule_stroll_button:
+		schedule_stroll_button.disabled = not day_phase_open
+	if schedule_gift_button:
+		schedule_gift_button.disabled = not day_phase_open
+	if schedule_home_button:
+		schedule_home_button.disabled = schedule_period != 2 or selected_character.is_empty()
+
+
+func _advance_schedule_period() -> void:
+	if schedule_period < 2:
+		schedule_period += 1
+	else:
+		schedule_period = 0
+		schedule_day += 1
+	schedule_pending_rollover = false
+	_update_schedule_ui()
+
+
+func _advance_schedule_day() -> void:
+	schedule_period = 0
+	schedule_day += 1
+	schedule_pending_rollover = false
+	schedule_last_action = "新的一天开始了。"
+	_update_schedule_ui()
+
+
+func _record_schedule_memory(memory_type: String, content: String, importance: int = 3) -> void:
+	if selected_character.is_empty():
+		return
+	var character_id := int(selected_character.get("id", 0))
+	if character_id <= 0:
+		return
+	var payload := {
+		"type": memory_type,
+		"content": content,
+		"importance": importance,
+	}
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/memories" % character_id, payload)
+	if result.ok:
+		await _refresh_characters()
+
+
+func _apply_schedule_result(text: String, money_delta: int, study_delta: int, relationship_delta: int) -> void:
+	schedule_money = max(0, schedule_money + money_delta)
+	schedule_study_points = max(0, schedule_study_points + study_delta)
+	schedule_relationship = max(0, schedule_relationship + relationship_delta)
+	schedule_last_action = text
+	_update_schedule_ui()
+
+
+func _perform_day_action(action_key: String) -> void:
+	if not story_complete:
+		_set_status("先完成序章，再安排白天生活。")
+		return
+	if schedule_period == 2:
+		_set_status("现在已经是晚上了，先回家互动。")
+		return
+
+	match action_key:
+		"work":
+			_apply_schedule_result("你去打工了一段时间，钱包稍微鼓了一点。", 35, 0, 0)
+			await _record_schedule_memory("important_conversation", "今天他去打工，晚上会更需要陪伴。", 2)
+			_advance_schedule_period()
+			_set_status("今天打工结束。")
+		"study":
+			_apply_schedule_result("你学习了 AI 调参，开始更懂怎么照顾她。", -5, 1, 0)
+			await _record_schedule_memory("user_preference", "主角正在学习 AI 调参，希望把陪伴体验调得更好。", 3)
+			_advance_schedule_period()
+			_set_status("调参学习完成。")
+		"stroll":
+			_apply_schedule_result("你去街上逛了逛，记住了一些适合约会的小地方。", -10, 0, 1)
+			await _record_schedule_memory("important_conversation", "主人今天去街上逛了逛，记住了一些适合一起散步的地方。", 2)
+			_advance_schedule_period()
+			_set_status("逛街结束。")
+		"gift":
+			if schedule_money < 25:
+				_set_status("钱不够买礼物，先去打工吧。")
+				return
+			_apply_schedule_result("你买了一份小礼物，准备晚上带给她。", -25, 0, 2)
+			await _record_schedule_memory("relationship", "主人买了小礼物，准备把它带回家送给她。", 4)
+			_advance_schedule_period()
+			_set_status("礼物已经准备好了。")
+		_:
+			return
+
+
+func _go_home_from_schedule() -> void:
+	if schedule_period != 2:
+		_set_status("晚上再回家和她互动，会更有氛围。")
+		return
+	if selected_character.is_empty():
+		_set_status("先选择一位 AI 伴侣。")
+		return
+	schedule_pending_rollover = true
+	_hide_schedule_overlay()
+	await _open_selected_character_chat(true)
 
 
 func _show_shop_line(text: String) -> void:
@@ -1889,6 +2217,9 @@ func _create_character() -> void:
 		if index >= 0:
 			await _select_character_by_index(index, false)
 
+	schedule_period = 2
+	schedule_last_action = "她刚刚被你从 AI 伴侣商店带回家。"
+	_update_schedule_ui()
 	_set_status("占位伴侣已登记，可以带回家测试对话。")
 	_update_story_continue_button()
 
