@@ -22,6 +22,15 @@ var story_popup_stage: Label
 var story_popup_text: RichTextLabel
 var story_continue_button: Button
 var story_skip_button: Button
+var shop_overlay: Control
+var shop_speaker_label: Label
+var shop_dialogue_text: RichTextLabel
+var shop_preview_label: RichTextLabel
+var shop_name_edit: LineEdit
+var shop_gender_option: OptionButton
+var shop_style_option: OptionButton
+var shop_age_spin: SpinBox
+var shop_visual_prompt_edit: TextEdit
 var immersive_overlay: Control
 var immersive_name_label: Label
 var immersive_role_label: Label
@@ -154,11 +163,11 @@ func _build_ui() -> void:
 	sidebar_box.add_child(divider)
 
 	menu_home_button = _make_menu_button("开始挑选", func() -> void:
-		_show_page(home_tab_index)
+		_show_shop_overlay()
 	)
 	sidebar_box.add_child(menu_home_button)
 
-	menu_chat_button = _make_menu_button("进入对话", func() -> void:
+	menu_chat_button = _make_menu_button("进入房间", func() -> void:
 		await _open_selected_character_chat()
 	)
 	menu_chat_button.disabled = true
@@ -227,6 +236,7 @@ func _build_ui() -> void:
 	_build_settings_tab(settings_tab)
 	_build_chat_tab(chat_tab)
 	_build_story_overlay()
+	_build_shop_overlay()
 	_build_immersive_overlay()
 	_initialize_story()
 
@@ -644,6 +654,190 @@ func _build_story_overlay() -> void:
 	button_row.add_child(story_continue_button)
 
 
+func _build_shop_overlay() -> void:
+	shop_overlay = Control.new()
+	shop_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	shop_overlay.visible = false
+	add_child(shop_overlay)
+
+	var shade := ColorRect.new()
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.0, 0.01, 0.02, 0.18)
+	shop_overlay.add_child(shade)
+
+	var top_margin := MarginContainer.new()
+	top_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	top_margin.add_theme_constant_override("margin_left", 28)
+	top_margin.add_theme_constant_override("margin_right", 28)
+	top_margin.add_theme_constant_override("margin_top", 22)
+	top_margin.add_theme_constant_override("margin_bottom", 780)
+	shop_overlay.add_child(top_margin)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 10)
+	top_margin.add_child(top_row)
+
+	var title := Label.new()
+	title.text = "AI COMPANION STORE"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0, 1.0))
+	top_row.add_child(title)
+
+	var settings_button := _make_button("API", func() -> void:
+		_hide_shop_overlay()
+		_show_page(settings_tab_index)
+	)
+	top_row.add_child(settings_button)
+
+	var debug_button := _make_button("后台", func() -> void:
+		_hide_shop_overlay()
+		_show_page(home_tab_index)
+	)
+	top_row.add_child(debug_button)
+
+	var display_margin := MarginContainer.new()
+	display_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	display_margin.add_theme_constant_override("margin_left", 560)
+	display_margin.add_theme_constant_override("margin_right", 560)
+	display_margin.add_theme_constant_override("margin_top", 150)
+	display_margin.add_theme_constant_override("margin_bottom", 330)
+	shop_overlay.add_child(display_margin)
+
+	var display_panel := PanelContainer.new()
+	_decorate_panel(display_panel, Color(0.02, 0.035, 0.045, 0.38), Color(0.52, 0.88, 0.96, 0.74))
+	display_margin.add_child(display_panel)
+
+	var display_box := VBoxContainer.new()
+	display_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	display_box.add_theme_constant_override("separation", 12)
+	display_panel.add_child(_with_padding(display_box, 20))
+
+	var display_mark := Label.new()
+	display_mark.text = "COMPANION"
+	display_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	display_mark.add_theme_font_size_override("font_size", 42)
+	display_mark.add_theme_color_override("font_color", Color(0.75, 0.96, 1.0, 1.0))
+	display_box.add_child(display_mark)
+
+	shop_preview_label = RichTextLabel.new()
+	shop_preview_label.bbcode_enabled = true
+	shop_preview_label.fit_content = true
+	shop_preview_label.scroll_active = false
+	shop_preview_label.custom_minimum_size = Vector2(0, 130)
+	shop_preview_label.add_theme_font_size_override("normal_font_size", 16)
+	display_box.add_child(shop_preview_label)
+
+	var dock_margin := MarginContainer.new()
+	dock_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dock_margin.add_theme_constant_override("margin_left", 80)
+	dock_margin.add_theme_constant_override("margin_right", 80)
+	dock_margin.add_theme_constant_override("margin_top", 560)
+	dock_margin.add_theme_constant_override("margin_bottom", 36)
+	shop_overlay.add_child(dock_margin)
+
+	var dock_panel := PanelContainer.new()
+	_decorate_panel(dock_panel, Color(0.035, 0.045, 0.060, 0.94), Color(0.36, 0.76, 0.82, 0.88))
+	dock_margin.add_child(dock_panel)
+
+	var dock := HBoxContainer.new()
+	dock.add_theme_constant_override("separation", 18)
+	dock_panel.add_child(_with_padding(dock, 18))
+
+	var dialogue_box := VBoxContainer.new()
+	dialogue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialogue_box.add_theme_constant_override("separation", 8)
+	dock.add_child(dialogue_box)
+
+	shop_speaker_label = Label.new()
+	shop_speaker_label.text = "店员"
+	shop_speaker_label.add_theme_font_size_override("font_size", 18)
+	shop_speaker_label.add_theme_color_override("font_color", Color(0.55, 0.90, 0.96, 1.0))
+	dialogue_box.add_child(shop_speaker_label)
+
+	shop_dialogue_text = RichTextLabel.new()
+	shop_dialogue_text.bbcode_enabled = true
+	shop_dialogue_text.scroll_active = false
+	shop_dialogue_text.custom_minimum_size = Vector2(0, 86)
+	shop_dialogue_text.add_theme_font_size_override("normal_font_size", 18)
+	dialogue_box.add_child(shop_dialogue_text)
+
+	var package_row := HBoxContainer.new()
+	package_row.add_theme_constant_override("separation", 8)
+	dialogue_box.add_child(package_row)
+
+	package_row.add_child(_make_button("温柔", func() -> void:
+		_select_shop_archetype("gentle")
+	))
+	package_row.add_child(_make_button("活泼", func() -> void:
+		_select_shop_archetype("playful")
+	))
+	package_row.add_child(_make_button("守护", func() -> void:
+		_select_shop_archetype("quiet")
+	))
+	package_row.add_child(_make_button("自定义", func() -> void:
+		_select_shop_archetype("custom")
+	))
+
+	var config_box := VBoxContainer.new()
+	config_box.custom_minimum_size = Vector2(480, 0)
+	config_box.add_theme_constant_override("separation", 8)
+	dock.add_child(config_box)
+
+	var option_row := HBoxContainer.new()
+	option_row.add_theme_constant_override("separation", 8)
+	config_box.add_child(option_row)
+
+	shop_gender_option = _make_option_button(["女性", "男性", "中性"])
+	shop_gender_option.item_selected.connect(func(_index: int) -> void:
+		_refresh_shop_preview()
+	)
+	option_row.add_child(shop_gender_option)
+
+	shop_age_spin = SpinBox.new()
+	shop_age_spin.min_value = 21
+	shop_age_spin.max_value = 34
+	shop_age_spin.step = 1
+	shop_age_spin.value = 24
+	shop_age_spin.custom_minimum_size = Vector2(96, 42)
+	shop_age_spin.value_changed.connect(func(_value: float) -> void:
+		_refresh_shop_preview()
+	)
+	option_row.add_child(shop_age_spin)
+
+	shop_style_option = _make_option_button(["真人写实", "二次元", "国漫脸", "半写实"])
+	shop_style_option.item_selected.connect(func(_index: int) -> void:
+		_refresh_shop_preview()
+	)
+	option_row.add_child(shop_style_option)
+
+	shop_name_edit = _make_line_edit("登记名", "Mira")
+	shop_name_edit.text_changed.connect(func(_text: String) -> void:
+		_refresh_shop_preview()
+	)
+	config_box.add_child(shop_name_edit)
+
+	shop_visual_prompt_edit = _make_text_edit("一句话描述她的外貌", "银灰色短发，温柔眼神，近未来家居服。")
+	shop_visual_prompt_edit.custom_minimum_size.y = 58
+	shop_visual_prompt_edit.text_changed.connect(_refresh_shop_preview)
+	config_box.add_child(shop_visual_prompt_edit)
+
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 8)
+	config_box.add_child(action_row)
+
+	action_row.add_child(_make_button("登记并带回家", func() -> void:
+		await _create_shop_character()
+	))
+	action_row.add_child(_make_button("稍后配图", func() -> void:
+		_set_status("已选择先跳过图片生成。")
+		_show_shop_line("没有图片 API 也没关系，主人。先把她带回家，对话和记忆会正常工作。")
+	))
+
+	_select_shop_archetype("gentle")
+
+
 func _build_immersive_overlay() -> void:
 	immersive_overlay = Control.new()
 	immersive_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -983,8 +1177,11 @@ func _finish_story() -> void:
 		menu_continue_story_button.visible = false
 	_set_gameplay_visible(true)
 	_render_selected_character()
-	_show_page(chat_tab_index)
 	_set_status("已回到出租屋，可以开始互动。")
+	if selected_character.is_empty():
+		_show_shop_overlay()
+	else:
+		await _open_selected_character_chat(true)
 
 
 func _skip_story() -> void:
@@ -997,7 +1194,7 @@ func _skip_story() -> void:
 		menu_continue_story_button.visible = false
 	_set_gameplay_visible(true)
 	_render_selected_character()
-	_show_page(home_tab_index)
+	_show_shop_overlay()
 	_set_status("已跳过序章。")
 
 
@@ -1020,10 +1217,12 @@ func _apply_chapter_scene(chapter: Dictionary) -> void:
 func _focus_chapter_tab(chapter: Dictionary) -> void:
 	var focus := str(chapter.get("focus_tab", ""))
 	if focus == "home":
-		_show_page(home_tab_index)
+		_show_shop_overlay()
 	elif focus == "settings":
+		_hide_shop_overlay()
 		_show_page(settings_tab_index)
 	elif focus == "chat":
+		_hide_shop_overlay()
 		_show_page(chat_tab_index)
 
 
@@ -1255,17 +1454,21 @@ func _render_selected_character() -> void:
 	)
 
 
-func _open_selected_character_chat() -> void:
+func _open_selected_character_chat(immersive: bool = true) -> void:
 	if selected_character.is_empty():
 		_set_status("Choose a character first.")
 		return
 
 	var character_id := int(selected_character.get("id", 0))
-	_set_status("Loading character chat...")
+	if immersive:
+		_show_immersive_chat()
+		_set_status("正在把她带回出租屋...")
+	else:
+		_set_status("Loading character chat...")
 
 	var character_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d" % character_id)
 	if not character_result.ok:
-		_set_status("Load character failed: %s" % character_result.error)
+		_set_status("房间已准备好，但角色资料加载失败：%s" % character_result.error)
 		return
 
 	selected_character = character_result.data if character_result.data is Dictionary else selected_character
@@ -1274,16 +1477,19 @@ func _open_selected_character_chat() -> void:
 	var messages_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/messages?limit=100" % character_id)
 	var memories_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/memories?limit=50" % character_id)
 	if not messages_result.ok:
-		_set_status("Load messages failed: %s" % messages_result.error)
+		_set_status("房间已准备好，但对话历史暂时无法读取。")
 		return
 	if not memories_result.ok:
-		_set_status("Load memories failed: %s" % memories_result.error)
+		_set_status("房间已准备好，但记忆暂时无法读取。")
 		return
 
 	_render_memories(memories_result.data if memories_result.data is Array else [])
 	_render_messages(messages_result.data if messages_result.data is Array else [])
-	_show_page(chat_tab_index)
-	_set_status("Chat ready.")
+	if immersive:
+		_set_status("她已经回到出租屋，正在等你开口。")
+	else:
+		_show_page(chat_tab_index)
+		_set_status("Chat ready.")
 
 
 func _render_memories(items: Array) -> void:
@@ -1353,13 +1559,16 @@ func _show_immersive_chat() -> void:
 	if selected_character.is_empty():
 		_set_status("先选择一位 AI 伴侣。")
 		return
-	if not story_complete:
-		_set_status("先完成回到出租屋的剧情，再开启面对面对话。")
-		return
+	if shop_overlay:
+		shop_overlay.visible = false
+	if not story_complete and not story_waiting_for_gameplay:
+		story_complete = true
 
 	background_image_rect.texture = load("res://assets/backgrounds/home.png")
 	background_tint.color = Color(0.02, 0.025, 0.025, 0.42)
 	_set_gameplay_visible(false)
+	if tab_container:
+		tab_container.visible = false
 	if immersive_overlay:
 		immersive_overlay.visible = true
 	if immersive_name_label:
@@ -1380,6 +1589,8 @@ func _show_immersive_chat() -> void:
 func _hide_immersive_chat() -> void:
 	if immersive_overlay:
 		immersive_overlay.visible = false
+	if tab_container:
+		tab_container.visible = true
 	_set_gameplay_visible(true)
 	_show_page(chat_tab_index)
 	_set_status("已返回普通对话界面。")
@@ -1438,6 +1649,109 @@ func _send_immersive_chat_message() -> void:
 			_escape_bbcode(reply),
 		])
 	_set_status("Reply generated %s." % ("by LLM" if used_llm else "in dev mode"))
+
+
+func _show_shop_overlay() -> void:
+	background_image_rect.texture = load("res://assets/backgrounds/aic_shop.png")
+	background_tint.color = Color(0.0, 0.02, 0.035, 0.32)
+	_set_gameplay_visible(false)
+	if story_overlay:
+		story_overlay.visible = false
+	if immersive_overlay:
+		immersive_overlay.visible = false
+	if shop_overlay:
+		shop_overlay.visible = true
+	_refresh_shop_preview()
+	_show_shop_line("欢迎来到 AI 伴侣专卖店。主人可以先挑一位占位伴侣带回家，图片 API 之后再补。")
+
+
+func _hide_shop_overlay() -> void:
+	if shop_overlay:
+		shop_overlay.visible = false
+	_set_gameplay_visible(true)
+
+
+func _show_shop_line(text: String) -> void:
+	if shop_dialogue_text == null:
+		return
+	shop_dialogue_text.clear()
+	shop_dialogue_text.append_text(_escape_bbcode(text))
+
+
+func _select_shop_archetype(archetype: String) -> void:
+	_select_companion_archetype(archetype)
+	_sync_shop_from_form()
+	match archetype:
+		"gentle":
+			_show_shop_line("温柔陪伴型会把主人的情绪放在第一位。她很乖，也很容易相信主人。")
+		"playful":
+			_show_shop_line("活泼好奇型适合日常互动，她会用轻快的语气回应主人，让出租屋热闹一点。")
+		"quiet":
+			_show_shop_line("安静守护型更适合慢慢聊天。她会陪主人坐很久，也不会打断主人的心事。")
+		_:
+			_show_shop_line("自定义空白型会等待主人写入设定。名字、画风和外貌都可以先用占位档案保存。")
+	_refresh_shop_preview()
+
+
+func _sync_shop_from_form() -> void:
+	if shop_name_edit and character_name_edit:
+		shop_name_edit.text = character_name_edit.text
+	if shop_visual_prompt_edit and companion_visual_prompt_edit:
+		shop_visual_prompt_edit.text = companion_visual_prompt_edit.text
+
+
+func _sync_form_from_shop() -> void:
+	if character_name_edit and shop_name_edit:
+		character_name_edit.text = shop_name_edit.text
+	if companion_visual_prompt_edit and shop_visual_prompt_edit:
+		companion_visual_prompt_edit.text = shop_visual_prompt_edit.text
+	if companion_gender_option and shop_gender_option:
+		companion_gender_option.select(shop_gender_option.selected)
+	if companion_age_spin and shop_age_spin:
+		companion_age_spin.value = shop_age_spin.value
+	if companion_style_option and shop_style_option:
+		companion_style_option.select(shop_style_option.selected)
+	_refresh_companion_preview()
+
+
+func _refresh_shop_preview() -> void:
+	if shop_preview_label == null:
+		return
+	var name := shop_name_edit.text.strip_edges() if shop_name_edit else "未命名"
+	if name.is_empty():
+		name = "未命名"
+	var gender := _get_option_text(shop_gender_option, "女性")
+	var style := _get_option_text(shop_style_option, "真人写实")
+	var age := int(shop_age_spin.value) if shop_age_spin else 24
+	var visual := shop_visual_prompt_edit.text.strip_edges() if shop_visual_prompt_edit else "等待主人描述。"
+	if visual.is_empty():
+		visual = "等待主人描述。"
+	shop_preview_label.text = (
+		"[center][b]%s[/b]\n%s / %d 岁 / %s\n\n%s\n\n[color=#89d7e6]占位立绘已就绪，可以直接测试对话。[/color][/center]"
+	) % [
+		_escape_bbcode(name),
+		_escape_bbcode(gender),
+		age,
+		_escape_bbcode(style),
+		_escape_bbcode(visual),
+	]
+
+
+func _create_shop_character() -> void:
+	_sync_form_from_shop()
+	_show_shop_line("正在为主人登记她的档案。不会等待图片生成，请稍等。")
+	await _create_character()
+	if selected_character.is_empty():
+		_show_shop_line("登记失败了，主人。请确认后端在线后再试一次。")
+		return
+	_show_shop_line("登记完成。她现在属于这个故事了，可以带回出租屋。")
+	_hide_shop_overlay()
+	if story_waiting_for_gameplay:
+		_complete_current_gameplay_step()
+	elif story_complete:
+		await _open_selected_character_chat()
+	else:
+		await _open_selected_character_chat()
 
 
 func _select_companion_archetype(archetype: String) -> void:

@@ -53,8 +53,8 @@ func get_chapters() -> Array:
 			"title": "回到出租屋",
 			"background": "res://assets/backgrounds/home.png",
 			"mode": "home",
-			"show_gameplay": true,
-			"focus_tab": "chat",
+			"show_gameplay": false,
+			"focus_tab": "",
 			"speaker": "旁白",
 			"lines": [
 				"他把生成好的 AI 带回出租屋。",
