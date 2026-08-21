@@ -102,6 +102,20 @@ var schedule_stroll_button: Button
 var schedule_gift_button: Button
 var schedule_home_button: Button
 var character_count_label: Label
+var progress_summary_label: RichTextLabel
+var gift_catalog_list: ItemList
+var inventory_list: ItemList
+var gift_purchase_button: Button
+var use_gift_button: Button
+var room_upgrade_button: Button
+var save_slot_spin: SpinBox
+var save_game_button: Button
+var load_game_button: Button
+var selected_gift_key: String = ""
+var selected_inventory_key: String = ""
+var character_progress: Dictionary = {}
+var gift_inventory: Array = []
+var gift_catalog: Array = []
 var chat_tab_index: int = 0
 var home_tab_index: int = 0
 var settings_tab_index: int = 0
@@ -462,69 +476,69 @@ func _build_settings_tab(parent: VBoxContainer) -> void:
 	split.split_offset = 760
 	parent.add_child(split)
 
-	var text_card := _make_card(split, "DeepSeek Text")
-	deepseek_key_edit = _make_line_edit("API Key (blank keeps current)", "")
+	var text_card := _make_card(split, "文字对话")
+	deepseek_key_edit = _make_line_edit("DeepSeek Key（留空不改）", "")
 	deepseek_key_edit.secret = true
 	text_card.add_child(deepseek_key_edit)
-	deepseek_base_url_edit = _make_line_edit("Base URL", "https://api.deepseek.com")
+	deepseek_base_url_edit = _make_line_edit("接口地址", "https://api.deepseek.com")
 	text_card.add_child(deepseek_base_url_edit)
-	deepseek_model_edit = _make_line_edit("Model", "deepseek-v4-pro")
+	deepseek_model_edit = _make_line_edit("模型名", "deepseek-v4-pro")
 	text_card.add_child(deepseek_model_edit)
-	deepseek_temperature_edit = _make_line_edit("Temperature", "0.7")
+	deepseek_temperature_edit = _make_line_edit("发散程度", "0.7")
 	text_card.add_child(deepseek_temperature_edit)
-	deepseek_max_tokens_edit = _make_line_edit("Max Tokens", "1024")
+	deepseek_max_tokens_edit = _make_line_edit("最多回复字数", "1024")
 	text_card.add_child(deepseek_max_tokens_edit)
-	deepseek_reasoning_edit = _make_line_edit("Reasoning Effort", "medium")
+	deepseek_reasoning_edit = _make_line_edit("思考强度", "medium")
 	text_card.add_child(deepseek_reasoning_edit)
 
-	var image_card := _make_card(split, "Image API")
-	image_key_edit = _make_line_edit("API Key (blank keeps current)", "")
+	var image_card := _make_card(split, "图片生成")
+	image_key_edit = _make_line_edit("图片 Key（留空不改）", "")
 	image_key_edit.secret = true
 	image_card.add_child(image_key_edit)
-	image_base_url_edit = _make_line_edit("Base URL", "https://api.openai.com/v1")
+	image_base_url_edit = _make_line_edit("接口地址", "https://api.openai.com/v1")
 	image_card.add_child(image_base_url_edit)
-	image_model_edit = _make_line_edit("Model", "gpt-image-1")
+	image_model_edit = _make_line_edit("模型名", "gpt-image-1")
 	image_card.add_child(image_model_edit)
-	image_generation_path_edit = _make_line_edit("Generation Path", "/images/generations")
+	image_generation_path_edit = _make_line_edit("生成路径", "/images/generations")
 	image_card.add_child(image_generation_path_edit)
-	image_edit_path_edit = _make_line_edit("Edit Path", "/images/edits")
+	image_edit_path_edit = _make_line_edit("编辑路径", "/images/edits")
 	image_card.add_child(image_edit_path_edit)
-	image_size_edit = _make_line_edit("Size", "1024x1024")
+	image_size_edit = _make_line_edit("尺寸", "1024x1024")
 	image_card.add_child(image_size_edit)
-	image_quality_edit = _make_line_edit("Quality", "medium")
+	image_quality_edit = _make_line_edit("质量", "medium")
 	image_card.add_child(image_quality_edit)
-	image_background_edit = _make_line_edit("Background", "transparent")
+	image_background_edit = _make_line_edit("背景", "transparent")
 	image_card.add_child(image_background_edit)
-	image_input_fidelity_edit = _make_line_edit("Input Fidelity", "high")
+	image_input_fidelity_edit = _make_line_edit("参考图强度", "high")
 	image_card.add_child(image_input_fidelity_edit)
 
-	var save_button := _make_button("Save Settings", func() -> void:
+	var save_button := _make_button("保存设置", func() -> void:
 		await _save_provider_settings()
 	)
 	image_card.add_child(save_button)
 
-	var reload_button := _make_button("Reload Settings", func() -> void:
+	var reload_button := _make_button("重新读取", func() -> void:
 		await _load_provider_settings()
 	)
 	image_card.add_child(reload_button)
 
-	var guide_card := _make_card(parent, "API 新手说明")
+	var guide_card := _make_card(parent, "新手说明")
 	guide_card.custom_minimum_size.y = 200
-	guide_card.add_child(_make_help_text("API Key 就像门票，填进去才能让游戏调用你自己的 AI 服务。"))
-	guide_card.add_child(_make_help_text("Base URL 是服务地址；Model 是你想用的模型名字。"))
-	guide_card.add_child(_make_help_text("推荐测试图像模型先用 gpt-image-1-mini，省钱；正式质量可以切到 gpt-image-1。"))
-	guide_card.add_child(_make_help_text("你可以先不填 Key，用后端的开发模式跑通流程，再换成真实 API。"))
+	guide_card.add_child(_make_help_text("先填文字 Key，聊天就能跑；图片 Key 可以以后再填。"))
+	guide_card.add_child(_make_help_text("如果你还没准备好真实接口，可以先留空，继续用占位模式测试。"))
+	guide_card.add_child(_make_help_text("图片模型先选便宜的测试款，确认流程正常后再换正式模型。"))
+	guide_card.add_child(_make_help_text("接口地址就是服务网址，模型名就是你买的那个模型名称。"))
 
 	var guide_buttons := HBoxContainer.new()
 	guide_buttons.add_theme_constant_override("separation", 10)
 	guide_card.add_child(guide_buttons)
 
-	var fill_recommended_button := _make_button("填入推荐测试值", func() -> void:
+	var fill_recommended_button := _make_button("填入测试值", func() -> void:
 		_fill_recommended_image_settings()
 	)
 	guide_buttons.add_child(fill_recommended_button)
 
-	var fill_siliconflow_button := _make_button("填入硅基流动 Qwen", func() -> void:
+	var fill_siliconflow_button := _make_button("硅基流动 Qwen", func() -> void:
 		_fill_siliconflow_qwen_settings()
 	)
 	guide_buttons.add_child(fill_siliconflow_button)
@@ -811,6 +825,14 @@ func _build_schedule_overlay() -> void:
 	schedule_stats_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stat_row.add_child(schedule_stats_label)
 
+	progress_summary_label = RichTextLabel.new()
+	progress_summary_label.bbcode_enabled = true
+	progress_summary_label.fit_content = true
+	progress_summary_label.scroll_active = false
+	progress_summary_label.custom_minimum_size = Vector2(0, 62)
+	progress_summary_label.add_theme_font_size_override("normal_font_size", 15)
+	root.add_child(progress_summary_label)
+
 	schedule_summary = RichTextLabel.new()
 	schedule_summary.bbcode_enabled = true
 	schedule_summary.fit_content = true
@@ -845,6 +867,66 @@ func _build_schedule_overlay() -> void:
 		await _perform_day_action("gift")
 	)
 	action_grid.add_child(schedule_gift_button)
+
+	var management_row := HBoxContainer.new()
+	management_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	management_row.add_theme_constant_override("separation", 14)
+	root.add_child(management_row)
+
+	var gift_box := _make_card(management_row, "礼物商店")
+	gift_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gift_catalog_list = ItemList.new()
+	gift_catalog_list.custom_minimum_size = Vector2(0, 108)
+	gift_catalog_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gift_catalog_list.item_selected.connect(_on_gift_catalog_selected)
+	gift_box.add_child(gift_catalog_list)
+	gift_purchase_button = _make_button("购买选中的礼物", func() -> void:
+		await _purchase_selected_gift()
+	)
+	gift_box.add_child(gift_purchase_button)
+
+	var inventory_box := _make_card(management_row, "礼物背包")
+	inventory_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_list = ItemList.new()
+	inventory_list.custom_minimum_size = Vector2(0, 108)
+	inventory_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_list.item_selected.connect(_on_inventory_selected)
+	inventory_box.add_child(inventory_list)
+	use_gift_button = _make_button("回家送出选中的礼物", func() -> void:
+		await _use_selected_gift()
+	)
+	use_gift_button.disabled = true
+	inventory_box.add_child(use_gift_button)
+
+	var room_box := _make_card(management_row, "房间与存档")
+	room_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	room_upgrade_button = _make_button("升级房间", func() -> void:
+		await _upgrade_room()
+	)
+	room_box.add_child(room_upgrade_button)
+
+	var save_row := HBoxContainer.new()
+	save_row.add_theme_constant_override("separation", 8)
+	room_box.add_child(save_row)
+	var save_label := Label.new()
+	save_label.text = "存档位"
+	save_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	save_row.add_child(save_label)
+	save_slot_spin = SpinBox.new()
+	save_slot_spin.min_value = 1
+	save_slot_spin.max_value = 5
+	save_slot_spin.step = 1
+	save_slot_spin.value = 1
+	save_slot_spin.custom_minimum_size = Vector2(84, 42)
+	save_row.add_child(save_slot_spin)
+	save_game_button = _make_button("保存", func() -> void:
+		await _save_game()
+	)
+	save_row.add_child(save_game_button)
+	load_game_button = _make_button("读取", func() -> void:
+		await _load_game()
+	)
+	save_row.add_child(load_game_button)
 
 	schedule_last_action_label = Label.new()
 	schedule_last_action_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1784,6 +1866,7 @@ func _open_selected_character_chat(immersive: bool = true) -> void:
 
 	selected_character = character_result.data if character_result.data is Dictionary else selected_character
 	_render_selected_character()
+	await _load_progress_and_inventory()
 
 	var messages_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/messages?limit=100" % character_id)
 	var memories_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/memories?limit=50" % character_id)
@@ -2030,6 +2113,19 @@ func _update_schedule_ui() -> void:
 		schedule_period_label.text = _format_schedule_period()
 	if schedule_stats_label:
 		schedule_stats_label.text = "资金 %d / 调参 %d / 关系 %d" % [schedule_money, schedule_study_points, schedule_relationship]
+	if progress_summary_label:
+		var stage := str(character_progress.get("relationship_stage", "初识"))
+		var room_name := str(character_progress.get("room_name", "出租屋"))
+		var room_desc := str(character_progress.get("room_description", ""))
+		var next_cost := character_progress.get("next_room_cost", null)
+		var room_hint := "最高等级"
+		if next_cost != null:
+			room_hint = "下一层需要 %d 金钱" % int(next_cost)
+		progress_summary_label.clear()
+		progress_summary_label.append_text(
+			"[b]关系阶段[/b] %s\n[b]房间[/b] %s · %s\n[b]升级提示[/b] %s"
+			% [_escape_bbcode(stage), _escape_bbcode(room_name), _escape_bbcode(room_desc), _escape_bbcode(room_hint)]
+		)
 	if schedule_last_action_label:
 		schedule_last_action_label.text = schedule_last_action
 	if schedule_summary:
@@ -2058,9 +2154,269 @@ func _update_schedule_ui() -> void:
 	if schedule_stroll_button:
 		schedule_stroll_button.disabled = not day_phase_open
 	if schedule_gift_button:
-		schedule_gift_button.disabled = not day_phase_open
+		schedule_gift_button.disabled = not day_phase_open or gift_catalog_list == null or gift_catalog_list.item_count == 0
 	if schedule_home_button:
 		schedule_home_button.disabled = schedule_period != 2 or selected_character.is_empty()
+	if gift_purchase_button:
+		gift_purchase_button.disabled = gift_catalog_list == null or gift_catalog_list.item_count == 0
+	if use_gift_button:
+		use_gift_button.disabled = inventory_list == null or inventory_list.item_count == 0 or selected_inventory_key.is_empty()
+	if room_upgrade_button:
+		var next_cost := character_progress.get("next_room_cost", null)
+		room_upgrade_button.disabled = next_cost == null or schedule_money < int(next_cost)
+		room_upgrade_button.text = "升级房间" if next_cost != null else "已是最高等级"
+	if save_game_button:
+		save_game_button.disabled = selected_character.is_empty()
+	if load_game_button:
+		load_game_button.disabled = selected_character.is_empty()
+
+
+func _refresh_progress_state(progress: Dictionary) -> void:
+	character_progress = progress
+	schedule_money = int(progress.get("money", schedule_money))
+	schedule_study_points = int(progress.get("study_points", schedule_study_points))
+	schedule_relationship = int(progress.get("relationship", schedule_relationship))
+	_update_schedule_ui()
+	_render_gift_catalog()
+	_render_inventory()
+
+
+func _render_gift_catalog() -> void:
+	if gift_catalog_list == null:
+		return
+	gift_catalog_list.clear()
+	if gift_catalog.is_empty():
+		gift_catalog_list.add_item("暂无礼物目录。")
+		selected_gift_key = ""
+		return
+	for item in gift_catalog:
+		if not (item is Dictionary):
+			continue
+		var gift_key := str(item.get("gift_key", "")).strip_edges()
+		var name := str(item.get("name", gift_key))
+		var price := int(item.get("price", 0))
+		var gain := int(item.get("relationship_gain", 0))
+		gift_catalog_list.add_item("%s  ¥%d  +%d" % [name, price, gain])
+		if gift_key == selected_gift_key:
+			gift_catalog_list.select(gift_catalog_list.item_count - 1)
+
+
+func _render_inventory() -> void:
+	if inventory_list == null:
+		return
+	var previous_selection := selected_inventory_key
+	inventory_list.clear()
+	selected_inventory_key = ""
+	var visual_index := 0
+	for item in gift_inventory:
+		if not (item is Dictionary):
+			continue
+		var quantity := int(item.get("quantity", 0))
+		if quantity <= 0:
+			continue
+		var gift_key := str(item.get("gift_key", "")).strip_edges()
+		var name := str(item.get("name", gift_key))
+		inventory_list.add_item("%s x%d" % [name, quantity])
+		if previous_selection == gift_key or (selected_inventory_key.is_empty() and visual_index == 0):
+			selected_inventory_key = gift_key
+			inventory_list.select(visual_index)
+		visual_index += 1
+
+
+func _on_gift_catalog_selected(index: int) -> void:
+	if index < 0 or index >= gift_catalog.size():
+		return
+	var item: Dictionary = gift_catalog[index]
+	selected_gift_key = str(item.get("gift_key", "")).strip_edges()
+	_update_schedule_ui()
+
+
+func _on_inventory_selected(index: int) -> void:
+	if index < 0:
+		selected_inventory_key = ""
+		_update_schedule_ui()
+		return
+	var current := 0
+	for item in gift_inventory:
+		if not (item is Dictionary):
+			continue
+		var quantity := int(item.get("quantity", 0))
+		if quantity <= 0:
+			continue
+		if current == index:
+			selected_inventory_key = str(item.get("gift_key", "")).strip_edges()
+			_update_schedule_ui()
+			return
+		current += 1
+	selected_inventory_key = ""
+	_update_schedule_ui()
+
+
+func _load_progress_and_inventory() -> void:
+	if selected_character.is_empty():
+		return
+	var character_id := int(selected_character.get("id", 0))
+	if character_id <= 0:
+		return
+
+	var progress_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/progress" % character_id)
+	if progress_result.ok and progress_result.data is Dictionary:
+		_refresh_progress_state(progress_result.data)
+
+	var gifts_result := await _request_json(HTTPClient.METHOD_GET, "/gifts/catalog")
+	if gifts_result.ok and gifts_result.data is Array:
+		gift_catalog = gifts_result.data
+		_render_gift_catalog()
+
+	var inventory_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/inventory" % character_id)
+	if inventory_result.ok and inventory_result.data is Array:
+		gift_inventory = inventory_result.data
+		_render_inventory()
+
+	_update_schedule_ui()
+
+
+func _apply_backend_day_action(action_key: String, status_text: String) -> void:
+	if selected_character.is_empty():
+		return
+	var character_id := int(selected_character.get("id", 0))
+	if character_id <= 0:
+		return
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/progress/action" % character_id, {"action_key": action_key})
+	if not result.ok:
+		_set_status("白天行动失败：%s" % result.error)
+		return
+	if result.data is Dictionary:
+		var progress: Dictionary = result.data.get("progress", {})
+		if not progress.is_empty():
+			_refresh_progress_state(progress)
+		schedule_last_action = str(result.data.get("message", status_text))
+		_update_schedule_ui()
+	_advance_schedule_period()
+	_set_status(status_text)
+
+
+func _purchase_selected_gift() -> bool:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return false
+	if selected_gift_key.is_empty() and gift_catalog.size() > 0:
+		var first_item: Dictionary = gift_catalog[0]
+		selected_gift_key = str(first_item.get("gift_key", "")).strip_edges()
+	if selected_gift_key.is_empty():
+		_set_status("没有可购买的礼物。")
+		return false
+	var character_id := int(selected_character.get("id", 0))
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/gifts/purchase" % character_id, {"gift_key": selected_gift_key})
+	if not result.ok:
+		_set_status("购买失败：%s" % result.error)
+		return false
+	if result.data is Dictionary:
+		var progress: Dictionary = result.data.get("progress", {})
+		if not progress.is_empty():
+			_refresh_progress_state(progress)
+		gift_inventory = result.data.get("inventory", gift_inventory)
+		_render_inventory()
+		_set_status(str(result.data.get("message", "礼物已购买。")))
+		selected_inventory_key = selected_gift_key
+		_update_schedule_ui()
+	return true
+
+
+func _use_selected_gift() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return
+	if selected_inventory_key.is_empty():
+		_set_status("先在背包里选一件礼物。")
+		return
+	var character_id := int(selected_character.get("id", 0))
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/gifts/use" % character_id, {"gift_key": selected_inventory_key})
+	if not result.ok:
+		_set_status("送礼失败：%s" % result.error)
+		return
+	if result.data is Dictionary:
+		var progress: Dictionary = result.data.get("progress", {})
+		if not progress.is_empty():
+			_refresh_progress_state(progress)
+		gift_inventory = result.data.get("inventory", gift_inventory)
+		_render_inventory()
+		_set_status(str(result.data.get("message", "礼物已送出。")))
+
+
+func _upgrade_room() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return
+	var next_cost := character_progress.get("next_room_cost", null)
+	if next_cost == null:
+		_set_status("房间已经是最高等级。")
+		return
+	var character_id := int(selected_character.get("id", 0))
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/room/upgrade" % character_id, {})
+	if not result.ok:
+		_set_status("升级失败：%s" % result.error)
+		return
+	if result.data is Dictionary:
+		var progress: Dictionary = result.data.get("progress", {})
+		if not progress.is_empty():
+			_refresh_progress_state(progress)
+		_set_status(str(result.data.get("message", "房间已升级。")))
+
+
+func _save_game() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return
+	var payload := {
+		"slot": int(save_slot_spin.value) if save_slot_spin else 1,
+		"state": {
+			"character_id": int(selected_character.get("id", 0)),
+			"schedule_day": schedule_day,
+			"schedule_period": schedule_period,
+			"schedule_money": schedule_money,
+			"schedule_study_points": schedule_study_points,
+			"schedule_relationship": schedule_relationship,
+			"selected_gift_key": selected_gift_key,
+			"selected_inventory_key": selected_inventory_key,
+			"room_level": int(character_progress.get("room_level", 0)),
+		},
+	}
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/saves" % int(selected_character.get("id", 0)), payload)
+	if not result.ok:
+		_set_status("保存失败：%s" % result.error)
+		return
+	_set_status("已保存到存档位 %d。" % int(save_slot_spin.value))
+
+
+func _load_game() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return
+	var slot := int(save_slot_spin.value) if save_slot_spin else 1
+	var result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/saves/%d" % [int(selected_character.get("id", 0)), slot])
+	if not result.ok:
+		_set_status("读取失败：%s" % result.error)
+		return
+	if result.data is Dictionary:
+		var state: Dictionary = result.data.get("state", {})
+		schedule_day = int(state.get("schedule_day", schedule_day))
+		schedule_period = int(state.get("schedule_period", schedule_period))
+		schedule_money = int(state.get("schedule_money", schedule_money))
+		schedule_study_points = int(state.get("schedule_study_points", schedule_study_points))
+		schedule_relationship = int(state.get("schedule_relationship", schedule_relationship))
+		selected_gift_key = str(state.get("selected_gift_key", selected_gift_key))
+		selected_inventory_key = str(state.get("selected_inventory_key", selected_inventory_key))
+		var sync_result := await _request_json(HTTPClient.METHOD_PUT, "/characters/%d/progress" % int(selected_character.get("id", 0)), {
+			"money": schedule_money,
+			"study_points": schedule_study_points,
+			"relationship": schedule_relationship,
+			"room_level": int(state.get("room_level", int(character_progress.get("room_level", 0)))),
+		})
+		if sync_result.ok and sync_result.data is Dictionary:
+			_refresh_progress_state(sync_result.data.get("progress", {}))
+		_update_schedule_ui()
+	_set_status("已读取存档位 %d。" % slot)
 
 
 func _advance_schedule_period() -> void:
@@ -2115,28 +2471,14 @@ func _perform_day_action(action_key: String) -> void:
 
 	match action_key:
 		"work":
-			_apply_schedule_result("你去打工了一段时间，钱包稍微鼓了一点。", 35, 0, 0)
-			await _record_schedule_memory("important_conversation", "今天他去打工，晚上会更需要陪伴。", 2)
-			_advance_schedule_period()
-			_set_status("今天打工结束。")
+			await _apply_backend_day_action("work", "今天打工结束。")
 		"study":
-			_apply_schedule_result("你学习了 AI 调参，开始更懂怎么照顾她。", -5, 1, 0)
-			await _record_schedule_memory("user_preference", "主角正在学习 AI 调参，希望把陪伴体验调得更好。", 3)
-			_advance_schedule_period()
-			_set_status("调参学习完成。")
+			await _apply_backend_day_action("study", "调参学习完成。")
 		"stroll":
-			_apply_schedule_result("你去街上逛了逛，记住了一些适合约会的小地方。", -10, 0, 1)
-			await _record_schedule_memory("important_conversation", "主人今天去街上逛了逛，记住了一些适合一起散步的地方。", 2)
-			_advance_schedule_period()
-			_set_status("逛街结束。")
+			await _apply_backend_day_action("stroll", "逛街结束。")
 		"gift":
-			if schedule_money < 25:
-				_set_status("钱不够买礼物，先去打工吧。")
-				return
-			_apply_schedule_result("你买了一份小礼物，准备晚上带给她。", -25, 0, 2)
-			await _record_schedule_memory("relationship", "主人买了小礼物，准备把它带回家送给她。", 4)
-			_advance_schedule_period()
-			_set_status("礼物已经准备好了。")
+			if await _purchase_selected_gift():
+				_advance_schedule_period()
 		_:
 			return
 

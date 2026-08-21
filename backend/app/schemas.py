@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,7 @@ class CharacterCreate(BaseModel):
 
 class CharacterRead(CharacterCreate):
     id: int
+    relationship: int = Field(default=0, ge=0, le=100)
     created_at: datetime
 
 
@@ -29,6 +30,8 @@ class ChatResponse(BaseModel):
     user_message: str
     reply: str
     used_llm: bool
+    relationship: int = Field(default=0, ge=0, le=100)
+    relationship_stage: str = "初识"
 
 
 class MessageRead(BaseModel):
@@ -157,3 +160,74 @@ class ImageProviderConfigRead(BaseModel):
 class ProviderConfigRead(BaseModel):
     text: TextProviderConfigRead
     image: ImageProviderConfigRead
+
+
+class CharacterProgressRead(BaseModel):
+    character_id: int
+    relationship: int = Field(ge=0, le=100)
+    relationship_stage: str
+    money: int = Field(ge=0)
+    study_points: int = Field(ge=0)
+    room_level: int = Field(ge=0)
+    room_name: str
+    room_description: str
+    next_room_cost: int | None = Field(default=None, ge=0)
+
+
+class GiftCatalogRead(BaseModel):
+    gift_key: str
+    name: str
+    description: str
+    price: int = Field(ge=0)
+    relationship_gain: int = Field(ge=0)
+
+
+class InventoryItemRead(GiftCatalogRead):
+    quantity: int = Field(ge=0)
+
+
+class GiftActionRequest(BaseModel):
+    gift_key: str = Field(..., min_length=1, max_length=80)
+
+
+class GiftActionResponse(BaseModel):
+    message: str
+    progress: CharacterProgressRead
+    inventory: list[InventoryItemRead]
+
+
+class RoomUpgradeResponse(BaseModel):
+    message: str
+    progress: CharacterProgressRead
+
+
+class ProgressActionRequest(BaseModel):
+    action_key: Literal["work", "study", "stroll"]
+
+
+class ProgressActionResponse(BaseModel):
+    message: str
+    progress: CharacterProgressRead
+
+
+class ProgressUpdateRequest(BaseModel):
+    money: int = Field(..., ge=0)
+    study_points: int = Field(..., ge=0)
+    relationship: int = Field(..., ge=0, le=100)
+    room_level: int = Field(..., ge=0)
+
+
+class ProgressUpdateResponse(BaseModel):
+    message: str
+    progress: CharacterProgressRead
+
+
+class SaveGameRequest(BaseModel):
+    slot: int = Field(..., ge=1, le=5)
+    state: dict[str, Any]
+
+
+class SaveGameRead(BaseModel):
+    slot: int
+    state: dict[str, Any]
+    updated_at: datetime

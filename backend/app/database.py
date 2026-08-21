@@ -97,6 +97,34 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS character_progress (
+                character_id INTEGER PRIMARY KEY,
+                relationship INTEGER NOT NULL DEFAULT 0 CHECK(relationship BETWEEN 0 AND 100),
+                money INTEGER NOT NULL DEFAULT 120 CHECK(money >= 0),
+                study_points INTEGER NOT NULL DEFAULT 0 CHECK(study_points >= 0),
+                room_level INTEGER NOT NULL DEFAULT 0 CHECK(room_level >= 0),
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS gift_inventory (
+                character_id INTEGER NOT NULL,
+                gift_key TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(character_id, gift_key),
+                FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS save_slots (
+                character_id INTEGER NOT NULL,
+                slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 5),
+                state_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(character_id, slot),
+                FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_messages_character_created
                 ON messages(character_id, created_at);
 
@@ -105,6 +133,15 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_actions_character
                 ON character_actions(character_id, updated_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_inventory_character
+                ON gift_inventory(character_id, updated_at DESC);
+            """
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO character_progress (character_id)
+            SELECT id FROM characters
             """
         )
 

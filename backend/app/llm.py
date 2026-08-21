@@ -4,6 +4,7 @@ import httpx
 
 from app.provider_store import get_provider_config
 from app.prompt_defaults import DEFAULT_COMPANION_ROLEPLAY_PROMPT
+from app.game_data import relationship_stage
 
 
 @dataclass
@@ -86,6 +87,12 @@ class LLMClient:
                 f"Character name: {character['name']}",
                 f"Personality: {character['personality']}",
                 f"Background: {character['background']}",
+                "Relationship progress:",
+                f"- Score: {int(character.get('relationship', 0))}/100",
+                f"- Stage: {relationship_stage(int(character.get('relationship', 0)))}",
+                f"- Money available for shared life: {int(character.get('money', 0))}",
+                f"- Home: {character.get('room_name', '出租屋')} - {character.get('room_description', '')}",
+                "Let relationship progress affect warmth, initiative, remembered details, and scene intimacy. Do not narrate the numeric score.",
                 "Memories:",
                 "\n".join(memory_lines) if memory_lines else "No saved memories yet.",
             ]
@@ -100,9 +107,17 @@ class LLMClient:
     def _generate_dev_reply(self, *, character: dict, user_message: str) -> LLMResult:
         name = character.get("name", "Character")
         personality = character.get("personality", "thoughtful")
+        relationship = int(character.get("relationship", 0))
+        stage = relationship_stage(relationship)
+        if relationship >= 60:
+            tone = "她熟悉你的习惯，主动靠近了一些"
+        elif relationship >= 30:
+            tone = "她已经比刚认识时更愿意敞开心扉"
+        else:
+            tone = "她还在一点点熟悉你的生活"
         reply = (
             f"[Dev Reply - configure DEEPSEEK_API_KEY for real LLM output]\n"
-            f"{name}: I heard you say: \"{user_message}\". "
-            f"I will respond through my personality: {personality}."
+            f"{name}（{stage}）：主人，我听见你说“{user_message}”了。"
+            f"{tone}。我会按照自己的性格回应你：{personality}。"
         )
         return LLMResult(reply=reply, used_llm=False)
