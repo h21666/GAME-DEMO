@@ -34,6 +34,9 @@ var shop_visual_prompt_edit: TextEdit
 var immersive_overlay: Control
 var immersive_name_label: Label
 var immersive_role_label: Label
+var immersive_portrait_rect: TextureRect
+var immersive_portrait_status_label: Label
+var immersive_action_card_grid: GridContainer
 var immersive_reply_text: RichTextLabel
 var immersive_input: LineEdit
 var schedule_overlay: Control
@@ -73,6 +76,16 @@ var image_background_edit: LineEdit
 var image_input_fidelity_edit: LineEdit
 var chat_messages: RichTextLabel
 var chat_input: LineEdit
+var chat_portrait_rect: TextureRect
+var chat_portrait_title_label: Label
+var chat_portrait_status_label: Label
+var chat_portrait_hint_label: RichTextLabel
+var chat_action_status_label: Label
+var chat_action_cards: Dictionary = {}
+var chat_action_card_grid: GridContainer
+var generate_visual_button: Button
+var generate_action_pack_button: Button
+var refresh_art_button: Button
 var tab_container: TabContainer
 var menu_home_button: Button
 var menu_chat_button: Button
@@ -100,6 +113,12 @@ var schedule_money: int = 120
 var schedule_study_points: int = 0
 var schedule_relationship: int = 0
 var schedule_last_action: String = "今天还没有安排。"
+var visual_profile: Dictionary = {}
+var action_assets: Dictionary = {}
+var action_templates: Array = []
+var texture_cache: Dictionary = {}
+var current_portrait_key: String = "master"
+var placeholder_portrait_texture: Texture2D
 
 
 func _ready() -> void:
@@ -549,24 +568,71 @@ func _build_chat_tab(parent: VBoxContainer) -> void:
 	stage_box.add_theme_constant_override("separation", 12)
 	companion_stage.add_child(_with_padding(stage_box, 16))
 
-	var avatar_mark := Label.new()
-	avatar_mark.text = "AI"
-	avatar_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	avatar_mark.add_theme_font_size_override("font_size", 64)
-	avatar_mark.add_theme_color_override("font_color", Color(0.74, 0.95, 1.0, 1.0))
-	stage_box.add_child(avatar_mark)
+	chat_portrait_title_label = Label.new()
+	chat_portrait_title_label.text = "立绘待生成"
+	chat_portrait_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chat_portrait_title_label.add_theme_font_size_override("font_size", 18)
+	chat_portrait_title_label.add_theme_color_override("font_color", Color(0.84, 0.95, 1.0, 1.0))
+	stage_box.add_child(chat_portrait_title_label)
 
-	var stage_hint := Label.new()
-	stage_hint.text = "她坐在出租屋的灯光下，等你开口。"
-	stage_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stage_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	stage_hint.add_theme_color_override("font_color", Color(0.76, 0.82, 0.88, 1.0))
-	stage_box.add_child(stage_hint)
+	chat_portrait_rect = TextureRect.new()
+	chat_portrait_rect.custom_minimum_size = Vector2(0, 245)
+	chat_portrait_rect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_portrait_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	chat_portrait_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	stage_box.add_child(chat_portrait_rect)
+
+	chat_portrait_status_label = Label.new()
+	chat_portrait_status_label.text = "她坐在出租屋的灯光下，等你开口。"
+	chat_portrait_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chat_portrait_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	chat_portrait_status_label.add_theme_color_override("font_color", Color(0.76, 0.82, 0.88, 1.0))
+	stage_box.add_child(chat_portrait_status_label)
 
 	var immersive_button := _make_button("隐藏界面，面对面说话", func() -> void:
 		_show_immersive_chat()
 	)
 	memory_card.add_child(immersive_button)
+
+	var portrait_row := HBoxContainer.new()
+	portrait_row.add_theme_constant_override("separation", 8)
+	memory_card.add_child(portrait_row)
+
+	generate_visual_button = _make_button("生成主立绘", func() -> void:
+		await _generate_master_portrait()
+	)
+	portrait_row.add_child(generate_visual_button)
+
+	refresh_art_button = _make_button("刷新立绘", func() -> void:
+		await _load_character_art()
+	)
+	portrait_row.add_child(refresh_art_button)
+
+	generate_action_pack_button = _make_button("生成动作包", func() -> void:
+		await _generate_action_pack()
+	)
+	memory_card.add_child(generate_action_pack_button)
+
+	chat_action_status_label = Label.new()
+	chat_action_status_label.text = "动作卡：先生成主立绘，再生成动作包。"
+	chat_action_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	chat_action_status_label.add_theme_color_override("font_color", Color(0.76, 0.82, 0.88, 1.0))
+	memory_card.add_child(chat_action_status_label)
+
+	chat_action_card_grid = GridContainer.new()
+	chat_action_card_grid.columns = 2
+	chat_action_card_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_action_card_grid.add_theme_constant_override("h_separation", 8)
+	chat_action_card_grid.add_theme_constant_override("v_separation", 8)
+	memory_card.add_child(chat_action_card_grid)
+
+	chat_portrait_hint_label = RichTextLabel.new()
+	chat_portrait_hint_label.bbcode_enabled = true
+	chat_portrait_hint_label.fit_content = true
+	chat_portrait_hint_label.scroll_active = false
+	chat_portrait_hint_label.custom_minimum_size = Vector2(0, 58)
+	chat_portrait_hint_label.add_theme_font_size_override("normal_font_size", 14)
+	memory_card.add_child(chat_portrait_hint_label)
 
 	var memory_title := Label.new()
 	memory_title.text = "记忆"
@@ -1038,12 +1104,12 @@ func _build_immersive_overlay() -> void:
 	character_box.add_theme_constant_override("separation", 14)
 	character_panel.add_child(_with_padding(character_box, 20))
 
-	var character_mark := Label.new()
-	character_mark.text = "COMPANION"
-	character_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	character_mark.add_theme_font_size_override("font_size", 42)
-	character_mark.add_theme_color_override("font_color", Color(0.78, 0.96, 1.0, 1.0))
-	character_box.add_child(character_mark)
+	immersive_portrait_rect = TextureRect.new()
+	immersive_portrait_rect.custom_minimum_size = Vector2(0, 330)
+	immersive_portrait_rect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	immersive_portrait_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	immersive_portrait_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	character_box.add_child(immersive_portrait_rect)
 
 	immersive_name_label = Label.new()
 	immersive_name_label.text = "AI"
@@ -1052,12 +1118,12 @@ func _build_immersive_overlay() -> void:
 	immersive_name_label.add_theme_color_override("font_color", Color(0.98, 0.99, 1.0, 1.0))
 	character_box.add_child(immersive_name_label)
 
-	var character_hint := Label.new()
-	character_hint.text = "她正看着你，等待主人的下一句话。"
-	character_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	character_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	character_hint.add_theme_color_override("font_color", Color(0.78, 0.84, 0.90, 1.0))
-	character_box.add_child(character_hint)
+	immersive_portrait_status_label = Label.new()
+	immersive_portrait_status_label.text = "她正看着你，等待主人的下一句话。"
+	immersive_portrait_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	immersive_portrait_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	immersive_portrait_status_label.add_theme_color_override("font_color", Color(0.78, 0.84, 0.90, 1.0))
+	character_box.add_child(immersive_portrait_status_label)
 
 	var dialogue_margin := MarginContainer.new()
 	dialogue_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1074,6 +1140,18 @@ func _build_immersive_overlay() -> void:
 	var dialogue_box := VBoxContainer.new()
 	dialogue_box.add_theme_constant_override("separation", 10)
 	dialogue_panel.add_child(_with_padding(dialogue_box, 18))
+
+	var action_caption := Label.new()
+	action_caption.text = "让她做点什么"
+	action_caption.add_theme_color_override("font_color", Color(0.72, 0.84, 0.90, 1.0))
+	dialogue_box.add_child(action_caption)
+
+	immersive_action_card_grid = GridContainer.new()
+	immersive_action_card_grid.columns = 6
+	immersive_action_card_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	immersive_action_card_grid.add_theme_constant_override("h_separation", 6)
+	immersive_action_card_grid.add_theme_constant_override("v_separation", 6)
+	dialogue_box.add_child(immersive_action_card_grid)
 
 	immersive_reply_text = RichTextLabel.new()
 	immersive_reply_text.bbcode_enabled = true
@@ -1409,6 +1487,45 @@ func _set_status(text: String) -> void:
 		status_label.text = text
 
 
+func _ensure_placeholder_portrait() -> Texture2D:
+	if placeholder_portrait_texture != null:
+		return placeholder_portrait_texture
+
+	var image := Image.create(512, 768, false, Image.FORMAT_RGBA8)
+	for y in range(768):
+		var ratio := float(y) / 767.0
+		var base := Color(0.04 + ratio * 0.04, 0.08 + ratio * 0.05, 0.10 + ratio * 0.08, 1.0)
+		for x in range(512):
+			image.set_pixel(x, y, base)
+
+	for y in range(96, 690):
+		for x in range(82, 430):
+			var nx := (float(x) - 256.0) / 174.0
+			var ny := (float(y) - 390.0) / 294.0
+			var distance := nx * nx + ny * ny
+			if distance < 1.0:
+				var glow := clamp(1.0 - distance, 0.0, 1.0)
+				var current := image.get_pixel(x, y)
+				image.set_pixel(x, y, current.lerp(Color(0.36, 0.82, 0.90, 0.90), glow * 0.46))
+
+	for y in range(130, 330):
+		for x in range(156, 356):
+			var nx := (float(x) - 256.0) / 100.0
+			var ny := (float(y) - 230.0) / 100.0
+			if nx * nx + ny * ny < 1.0:
+				image.set_pixel(x, y, Color(0.78, 0.95, 1.0, 0.95))
+
+	for y in range(342, 690):
+		for x in range(116, 396):
+			var nx := (float(x) - 256.0) / 140.0
+			var ny := (float(y) - 690.0) / 348.0
+			if nx * nx + ny * ny < 1.0:
+				image.set_pixel(x, y, Color(0.70, 0.90, 0.96, 0.88))
+
+	placeholder_portrait_texture = ImageTexture.create_from_image(image)
+	return placeholder_portrait_texture
+
+
 func _show_page(index: int) -> void:
 	if tab_container == null:
 		return
@@ -1436,6 +1553,7 @@ func _reload_everything() -> void:
 
 	_set_status("Backend online. Loading providers...")
 	await _load_provider_settings()
+	await _load_action_templates()
 	await _refresh_characters()
 	_set_status("Connected to backend.")
 
@@ -1576,6 +1694,9 @@ func _select_character_by_index(index: int, open_chat: bool) -> void:
 		return
 
 	selected_character = characters[index]
+	visual_profile = {}
+	action_assets = {}
+	current_portrait_key = "master"
 	if character_list.item_count > index:
 		character_list.select(index)
 	_render_selected_character()
@@ -1643,6 +1764,7 @@ func _open_selected_character_chat(immersive: bool = true) -> void:
 
 	_render_memories(memories_result.data if memories_result.data is Array else [])
 	_render_messages(messages_result.data if messages_result.data is Array else [])
+	await _load_character_art()
 	if immersive:
 		_set_status("她已经回到出租屋，正在等你开口。")
 	else:
@@ -1999,6 +2121,432 @@ func _go_home_from_schedule() -> void:
 	await _open_selected_character_chat(true)
 
 
+func _get_default_action_templates() -> Array:
+	return [
+		{"action_key": "idle", "action_name": "待机", "action_prompt": "standing in a natural idle pose, relaxed and calm"},
+		{"action_key": "smile", "action_name": "微笑", "action_prompt": "smiling warmly with a soft friendly expression"},
+		{"action_key": "greet", "action_name": "打招呼", "action_prompt": "raising one hand in a gentle greeting pose"},
+		{"action_key": "drink_tea", "action_name": "喝茶", "action_prompt": "holding a tea cup and taking a small sip"},
+		{"action_key": "read_book", "action_name": "看书", "action_prompt": "sitting or standing while reading an open book"},
+		{"action_key": "sleepy", "action_name": "困倦", "action_prompt": "looking sleepy and softly rubbing one eye"},
+	]
+
+
+func _normalize_action_templates(items: Array) -> Array:
+	var normalized: Array = []
+	for item in items:
+		if item is Dictionary:
+			var action_key := str(item.get("action_key", "")).strip_edges()
+			var action_name := str(item.get("action_name", "")).strip_edges()
+			var action_prompt := str(item.get("action_prompt", "")).strip_edges()
+			if action_key.is_empty() or action_name.is_empty():
+				continue
+			normalized.append({
+				"action_key": action_key,
+				"action_name": action_name,
+				"action_prompt": action_prompt,
+			})
+	if normalized.is_empty():
+		return _get_default_action_templates()
+	return normalized
+
+
+func _load_action_templates() -> void:
+	var result := await _request_json(HTTPClient.METHOD_GET, "/action-templates")
+	if result.ok and result.data is Array and not result.data.is_empty():
+		action_templates = _normalize_action_templates(result.data)
+	else:
+		action_templates = _get_default_action_templates()
+	_render_action_cards()
+
+
+func _load_character_art() -> void:
+	if selected_character.is_empty():
+		return
+
+	var character_id := int(selected_character.get("id", 0))
+	if character_id <= 0:
+		return
+
+	var profile_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/visual-profile" % character_id)
+	if profile_result.ok and profile_result.data is Dictionary:
+		visual_profile = profile_result.data
+		_apply_visual_profile_to_form(visual_profile)
+	else:
+		visual_profile = {}
+
+	var actions_result := await _request_json(HTTPClient.METHOD_GET, "/characters/%d/actions" % character_id)
+	action_assets = {}
+	if actions_result.ok and actions_result.data is Array:
+		for item in actions_result.data:
+			if item is Dictionary:
+				var action_key := str(item.get("action_key", "")).strip_edges()
+				if not action_key.is_empty():
+					action_assets[action_key] = item
+
+	_render_action_cards()
+	await _refresh_portrait_display()
+	if visual_profile.is_empty():
+		_show_art_status("还没有主立绘，先点“生成主立绘”。")
+	else:
+		_show_art_status("主立绘已就绪，可以切换动作卡。")
+
+
+func _apply_visual_profile_to_form(profile: Dictionary) -> void:
+	if profile.is_empty():
+		return
+
+	var gender := str(profile.get("gender", "female"))
+	if companion_gender_option:
+		if gender == "male":
+			companion_gender_option.select(1)
+		elif gender == "non_binary":
+			companion_gender_option.select(2)
+		else:
+			companion_gender_option.select(0)
+
+	if companion_age_spin:
+		companion_age_spin.value = int(profile.get("age", 24))
+	if companion_style_option:
+		var style := str(profile.get("art_style", "真人写实"))
+		for index in range(companion_style_option.item_count):
+			if companion_style_option.get_item_text(index) == style:
+				companion_style_option.select(index)
+				break
+	if companion_visual_prompt_edit:
+		var visual_description := str(profile.get("visual_description", "")).strip_edges()
+		if not visual_description.is_empty():
+			companion_visual_prompt_edit.text = visual_description
+
+
+func _render_action_cards() -> void:
+	if chat_action_card_grid == null:
+		return
+
+	for child in chat_action_card_grid.get_children():
+		child.queue_free()
+	chat_action_cards.clear()
+
+	if action_templates.is_empty():
+		action_templates = _get_default_action_templates()
+
+	var master_button := _make_button("主立绘\n当前形象", func() -> void:
+		await _select_action_card("master")
+	)
+	master_button.custom_minimum_size = Vector2(0, 72)
+	chat_action_card_grid.add_child(master_button)
+	chat_action_cards["master"] = master_button
+
+	for item in action_templates:
+		if not (item is Dictionary):
+			continue
+		var action_key := str(item.get("action_key", "")).strip_edges()
+		var action_name := str(item.get("action_name", action_key)).strip_edges()
+		if action_key.is_empty():
+			continue
+
+		var asset: Dictionary = {}
+		if action_assets.has(action_key) and action_assets[action_key] is Dictionary:
+			asset = action_assets[action_key]
+
+		var ready := str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
+		var label := "%s\n%s" % [action_name, "已生成" if ready else "待生成"]
+		var bound_key := action_key
+		var button := _make_button(label, func() -> void:
+			await _select_action_card(bound_key)
+		)
+		button.custom_minimum_size = Vector2(0, 72)
+		button.disabled = false
+		chat_action_card_grid.add_child(button)
+		chat_action_cards[action_key] = button
+
+	_show_action_card_styles()
+	_render_immersive_action_cards()
+
+
+func _render_immersive_action_cards() -> void:
+	if immersive_action_card_grid == null:
+		return
+
+	for child in immersive_action_card_grid.get_children():
+		child.queue_free()
+
+	var master_button := _make_button("主立绘", func() -> void:
+		await _select_action_card("master")
+	)
+	master_button.custom_minimum_size = Vector2(0, 36)
+	immersive_action_card_grid.add_child(master_button)
+	if current_portrait_key == "master":
+		_style_button(master_button, Color(0.24, 0.42, 0.52, 1.0), Color(0.30, 0.70, 0.82, 1.0))
+
+	for item in action_templates:
+		if not (item is Dictionary):
+			continue
+		var action_key := str(item.get("action_key", "")).strip_edges()
+		if action_key.is_empty():
+			continue
+		var asset: Dictionary = action_assets.get(action_key, {})
+		var ready := str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
+		var bound_key := action_key
+		var button := _make_button(_action_name_for_key(action_key), func() -> void:
+			await _select_action_card(bound_key)
+		)
+		button.custom_minimum_size = Vector2(0, 36)
+		button.disabled = not ready
+		immersive_action_card_grid.add_child(button)
+		if current_portrait_key == action_key:
+			_style_button(button, Color(0.24, 0.42, 0.52, 1.0), Color(0.30, 0.70, 0.82, 1.0))
+		elif ready:
+			_style_button(button, Color(0.15, 0.20, 0.26, 0.96), Color(0.24, 0.64, 0.69, 1.0))
+		else:
+			_style_button(button, Color(0.08, 0.10, 0.13, 0.90), Color(0.12, 0.14, 0.18, 1.0))
+
+
+func _show_action_card_styles() -> void:
+	for action_key in chat_action_cards.keys():
+		var button: Button = chat_action_cards[action_key]
+		if button == null:
+			continue
+		var asset: Dictionary = action_assets.get(action_key, {})
+		var ready := str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
+		var selected := current_portrait_key == action_key
+		if selected:
+			_style_button(button, Color(0.24, 0.42, 0.52, 1.0), Color(0.30, 0.70, 0.82, 1.0))
+		elif ready:
+			_style_button(button, Color(0.18, 0.24, 0.32, 1.0), Color(0.24, 0.64, 0.69, 1.0))
+		else:
+			_style_button(button, Color(0.10, 0.12, 0.16, 1.0), Color(0.16, 0.18, 0.22, 1.0))
+
+
+func _select_action_card(action_key: String) -> void:
+	if action_key == "master":
+		current_portrait_key = "master"
+		_render_action_cards()
+		await _refresh_portrait_display()
+		return
+
+	var asset: Dictionary = action_assets.get(action_key, {})
+	var image_url := str(asset.get("image_url", "")).strip_edges()
+	if image_url.is_empty():
+		current_portrait_key = "master"
+		_render_action_cards()
+		await _refresh_portrait_display()
+		_show_art_status("这个动作还没生成图片，先去生成动作包。")
+		return
+
+	current_portrait_key = action_key
+	_render_action_cards()
+	await _refresh_portrait_display()
+	_show_art_status("已切换到动作卡：%s。" % _action_name_for_key(action_key))
+
+
+func _refresh_portrait_display() -> void:
+	var title := str(selected_character.get("name", "AI"))
+	var portrait_url := ""
+	var status_text := "主立绘待生成。"
+	var hint_text := "先生成主立绘，再生成动作包，卡片就能切换。"
+
+	if current_portrait_key == "master":
+		if visual_profile is Dictionary:
+			portrait_url = str(visual_profile.get("master_image_url", "")).strip_edges()
+			var profile_status := str(visual_profile.get("status", "draft"))
+			status_text = "主立绘状态：%s" % profile_status
+			var gender := str(visual_profile.get("gender", ""))
+			var age := int(visual_profile.get("age", 24))
+			var style := str(visual_profile.get("art_style", ""))
+			hint_text = "主立绘：%s / %d 岁 / %s" % [gender, age, style]
+	else:
+		var asset: Dictionary = action_assets.get(current_portrait_key, {})
+		if asset is Dictionary:
+			portrait_url = str(asset.get("image_url", "")).strip_edges()
+			var action_name := str(asset.get("action_name", current_portrait_key))
+			var asset_status := str(asset.get("status", "draft"))
+			status_text = "%s / %s" % [action_name, asset_status]
+			hint_text = str(asset.get("action_prompt", ""))
+
+	if portrait_url.is_empty():
+		_apply_portrait_texture(_ensure_placeholder_portrait())
+	else:
+		await _apply_portrait_texture_from_url(portrait_url)
+
+	if chat_portrait_title_label:
+		var portrait_name := "主立绘" if current_portrait_key == "master" else _action_name_for_key(current_portrait_key)
+		chat_portrait_title_label.text = "%s · %s" % [title, portrait_name]
+	if chat_portrait_status_label:
+		chat_portrait_status_label.text = status_text
+	if chat_portrait_hint_label:
+		chat_portrait_hint_label.clear()
+		chat_portrait_hint_label.append_text(_escape_bbcode(hint_text))
+	if immersive_name_label:
+		immersive_name_label.text = title
+	if immersive_portrait_status_label:
+		immersive_portrait_status_label.text = status_text + "\n" + hint_text
+
+
+func _show_art_status(text: String) -> void:
+	if chat_action_status_label:
+		chat_action_status_label.text = text
+	if immersive_portrait_status_label and not text.is_empty():
+		immersive_portrait_status_label.text = text
+
+
+func _action_name_for_key(action_key: String) -> String:
+	for item in action_templates:
+		if item is Dictionary and str(item.get("action_key", "")) == action_key:
+			return str(item.get("action_name", action_key))
+	return action_key
+
+
+func _apply_portrait_texture(texture: Texture2D) -> void:
+	if chat_portrait_rect:
+		chat_portrait_rect.texture = texture
+	if immersive_portrait_rect:
+		immersive_portrait_rect.texture = texture
+
+
+func _apply_portrait_texture_from_url(url: String) -> void:
+	if texture_cache.has(url):
+		_apply_portrait_texture(texture_cache[url])
+		return
+
+	var result := await _request_http(HTTPClient.METHOD_GET, url)
+	if not result.ok:
+		_apply_portrait_texture(_ensure_placeholder_portrait())
+		return
+
+	var texture := _bytes_to_texture(result.bytes, url)
+	if texture == null:
+		_apply_portrait_texture(_ensure_placeholder_portrait())
+		return
+
+	texture_cache[url] = texture
+	_apply_portrait_texture(texture)
+
+
+func _bytes_to_texture(bytes: PackedByteArray, source_name: String) -> Texture2D:
+	if bytes.is_empty():
+		return null
+
+	var image := Image.new()
+	var loaded := false
+	var lower := source_name.to_lower()
+
+	if lower.ends_with(".jpg") or lower.ends_with(".jpeg"):
+		loaded = image.load_jpg_from_buffer(bytes) == OK
+	elif lower.ends_with(".webp"):
+		loaded = image.load_webp_from_buffer(bytes) == OK
+	else:
+		loaded = image.load_png_from_buffer(bytes) == OK
+
+	if not loaded:
+		if image.load_png_from_buffer(bytes) == OK:
+			loaded = true
+		elif image.load_jpg_from_buffer(bytes) == OK:
+			loaded = true
+		elif image.load_webp_from_buffer(bytes) == OK:
+			loaded = true
+
+	if not loaded:
+		return null
+
+	return ImageTexture.create_from_image(image)
+
+
+func _visual_profile_payload() -> Dictionary:
+	var gender := _get_option_text(companion_gender_option, "female")
+	if gender == "女性":
+		gender = "female"
+	elif gender == "男性":
+		gender = "male"
+	else:
+		gender = "non_binary"
+
+	return {
+		"gender": gender,
+		"age": int(companion_age_spin.value) if companion_age_spin else 24,
+		"art_style": _get_option_text(companion_style_option, "真人写实"),
+		"visual_description": companion_visual_prompt_edit.text.strip_edges() if companion_visual_prompt_edit else "",
+	}
+
+
+func _sync_visual_profile_record() -> void:
+	if selected_character.is_empty():
+		return
+
+	var character_id := int(selected_character.get("id", 0))
+	if character_id <= 0:
+		return
+
+	var payload := _visual_profile_payload()
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/visual-profile" % character_id, payload)
+	if result.ok and result.data is Dictionary:
+		visual_profile = result.data
+
+
+func _generate_master_portrait() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return
+
+	await _sync_visual_profile_record()
+	if selected_character.is_empty():
+		return
+
+	var character_id := int(selected_character.get("id", 0))
+	var payload := _visual_profile_payload()
+	var form_body := _build_form_body(payload)
+	_set_status("正在生成主立绘...")
+	var headers := PackedStringArray(["Content-Type: application/x-www-form-urlencoded"])
+	var result := await _request_http(HTTPClient.METHOD_POST, "/characters/%d/visual-profile/generate" % character_id, headers, form_body)
+	if not result.ok:
+		_set_status("主立绘生成失败：%s" % result.error)
+		return
+
+	if result.data is Dictionary:
+		visual_profile = result.data
+	current_portrait_key = "master"
+	_render_action_cards()
+	await _refresh_portrait_display()
+	_set_status("主立绘已保存并展示。")
+
+
+func _generate_action_pack() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位角色。")
+		return
+
+	var character_id := int(selected_character.get("id", 0))
+	if character_id <= 0:
+		return
+
+	_set_status("正在生成动作包...")
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/action-pack/generate" % character_id, {"regenerate": false})
+	if not result.ok:
+		_set_status("动作包生成失败：%s" % result.error)
+		return
+
+	action_assets = {}
+	if result.data is Dictionary:
+		var actions: Array = result.data.get("actions", [])
+		for item in actions:
+			if item is Dictionary:
+				var action_key := str(item.get("action_key", "")).strip_edges()
+				if not action_key.is_empty():
+					action_assets[action_key] = item
+
+	_render_action_cards()
+	await _refresh_portrait_display()
+	_set_status("动作卡已保存，点击即可切换。")
+
+
+func _build_form_body(payload: Dictionary) -> String:
+	var parts: Array[String] = []
+	for key in payload.keys():
+		var value := payload[key]
+		parts.append("%s=%s" % [str(key).uri_encode(), str(value).uri_encode()])
+	return "&".join(parts)
+
+
 func _show_shop_line(text: String) -> void:
 	if shop_dialogue_text == null:
 		return
@@ -2216,6 +2764,7 @@ func _create_character() -> void:
 		var index := _find_character_index(created_id)
 		if index >= 0:
 			await _select_character_by_index(index, false)
+			await _sync_visual_profile_record()
 
 	schedule_period = 2
 	schedule_last_action = "她刚刚被你从 AI 伴侣商店带回家。"
@@ -2276,19 +2825,19 @@ func _fill_siliconflow_qwen_settings() -> void:
 	_set_status("硅基流动 Qwen 测试值已填入。填好图片 API Key 后保存。")
 
 
-func _request_json(method: int, path: String, payload: Variant = null) -> Dictionary:
+func _resolve_request_url(path: String) -> String:
+	if path.begins_with("http://") or path.begins_with("https://"):
+		return path
+	return _build_url(path)
+
+
+func _request_http(method: int, path: String, headers: PackedStringArray = PackedStringArray(), body: String = "") -> Dictionary:
 	var request := HTTPRequest.new()
 	add_child(request)
 	request.use_threads = true
-	request.timeout = 25.0
+	request.timeout = 120.0 if body.length() > 0 or method != HTTPClient.METHOD_GET else 25.0
 
-	var headers := PackedStringArray(["Accept: application/json"])
-	var body := ""
-	if payload != null:
-		headers.append("Content-Type: application/json")
-		body = JSON.stringify(payload)
-
-	var error := request.request(_build_url(path), headers, method, body)
+	var error := request.request(_resolve_request_url(path), headers, method, body)
 	if error != OK:
 		request.queue_free()
 		return {"ok": false, "error": "HTTP request failed: %s" % error}
@@ -2301,20 +2850,36 @@ func _request_json(method: int, path: String, payload: Variant = null) -> Dictio
 		return {"ok": false, "error": "请求超时或后端没有响应，请确认 Backend 正在运行。"}
 
 	var response_code := int(completed[1])
+	var response_headers: PackedStringArray = completed[2]
 	var response_body: PackedByteArray = completed[3]
 	var response_text := response_body.get_string_from_utf8()
 
 	if response_code < 200 or response_code >= 300:
 		var reason := response_text if not response_text.is_empty() else "HTTP %d" % response_code
-		return {"ok": false, "error": reason}
+		return {"ok": false, "error": reason, "code": response_code, "headers": response_headers, "bytes": response_body}
+
+	return {"ok": true, "code": response_code, "headers": response_headers, "bytes": response_body, "text": response_text}
+
+
+func _request_json(method: int, path: String, payload: Variant = null) -> Dictionary:
+	var headers := PackedStringArray(["Accept: application/json"])
+	var body := ""
+	if payload != null:
+		headers.append("Content-Type: application/json")
+		body = JSON.stringify(payload)
+
+	var result := await _request_http(method, path, headers, body)
+	if not bool(result.get("ok", false)):
+		return {"ok": false, "error": str(result.get("error", "HTTP request failed."))}
 
 	var parsed: Variant = null
+	var response_text := str(result.get("text", ""))
 	if not response_text.is_empty():
 		parsed = JSON.parse_string(response_text)
 		if parsed == null and response_text != "null":
 			return {"ok": false, "error": "Failed to parse backend response."}
 
-	return {"ok": true, "data": parsed, "text": response_text}
+	return {"ok": true, "data": parsed, "text": response_text, "bytes": result.get("bytes", PackedByteArray())}
 
 
 func _escape_bbcode(text: String) -> String:
