@@ -2249,7 +2249,7 @@ func _render_action_cards() -> void:
 		if action_assets.has(action_key) and action_assets[action_key] is Dictionary:
 			asset = action_assets[action_key]
 
-		var ready := str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
+		var ready: bool = str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
 		var label := "%s\n%s" % [action_name, "已生成" if ready else "待生成"]
 		var bound_key := action_key
 		var button := _make_button(label, func() -> void:
@@ -2286,7 +2286,7 @@ func _render_immersive_action_cards() -> void:
 		if action_key.is_empty():
 			continue
 		var asset: Dictionary = action_assets.get(action_key, {})
-		var ready := str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
+		var ready: bool = str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
 		var bound_key := action_key
 		var button := _make_button(_action_name_for_key(action_key), func() -> void:
 			await _select_action_card(bound_key)
@@ -2308,8 +2308,8 @@ func _show_action_card_styles() -> void:
 		if button == null:
 			continue
 		var asset: Dictionary = action_assets.get(action_key, {})
-		var ready := str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
-		var selected := current_portrait_key == action_key
+		var ready: bool = str(asset.get("status", "draft")) == "ready" and str(asset.get("image_url", "")).strip_edges() != ""
+		var selected: bool = current_portrait_key == action_key
 		if selected:
 			_style_button(button, Color(0.24, 0.42, 0.52, 1.0), Color(0.30, 0.70, 0.82, 1.0))
 		elif ready:
