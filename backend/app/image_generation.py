@@ -1,6 +1,7 @@
 import base64
 import binascii
 import hashlib
+import mimetypes
 from io import BytesIO
 from pathlib import Path
 
@@ -42,6 +43,9 @@ class ImageGenerationClient:
         return await self._generate_image(prompt, config=config)
 
     async def _generate_image(self, prompt: str, config: dict) -> bytes:
+        if _is_siliconflow_config(config):
+            return await self._generate_siliconflow_image(prompt=prompt, config=config)
+
         url = f"{config['base_url'].rstrip('/')}{config['generation_path']}"
         data = {
             "model": config["model"],
@@ -58,7 +62,7 @@ class ImageGenerationClient:
                 json=data,
             )
 
-        return self._extract_image(response)
+        return await self._extract_image(response)
 
     async def _edit_image(
         self,
@@ -69,6 +73,14 @@ class ImageGenerationClient:
         content_type: str,
         config: dict,
     ) -> bytes:
+        if _is_siliconflow_config(config):
+            return await self._generate_siliconflow_image(
+                prompt=prompt,
+                config=config,
+                reference_image=image,
+                reference_content_type=content_type,
+            )
+
         url = f"{config['base_url'].rstrip('/')}{config['edit_path']}"
         data = {
             "model": config["model"],
@@ -91,10 +103,45 @@ class ImageGenerationClient:
                 files=files,
             )
 
-        return self._extract_image(response)
+        return await self._extract_image(response)
 
-    @staticmethod
-    def _extract_image(response: httpx.Response) -> bytes:
+    async def _generate_siliconflow_image(
+        self,
+        *,
+        prompt: str,
+        config: dict,
+        reference_image: bytes | None = None,
+        reference_content_type: str = "image/png",
+    ) -> bytes:
+        url = f"{config['base_url'].rstrip('/')}{config['generation_path']}"
+        data = {
+            "model": config["model"],
+            "prompt": prompt,
+            "num_inference_steps": 20,
+        }
+        if config.get("size") and "Image-Edit" not in config["model"]:
+            data["image_size"] = config["size"]
+        if config["model"].startswith("Qwen/Qwen-Image"):
+            data["cfg"] = 4
+        if config["model"].startswith("Kwai-Kolors/"):
+            data["batch_size"] = 1
+            data["guidance_scale"] = 7.5
+        if reference_image:
+            data["image"] = _build_data_url(reference_image, reference_content_type)
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {config['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=data,
+            )
+
+        return await self._extract_image(response)
+
+    async def _extract_image(self, response: httpx.Response) -> bytes:
         if response.is_error:
             detail = response.text[:1000]
             raise ImageGenerationError(
@@ -103,7 +150,8 @@ class ImageGenerationClient:
 
         try:
             payload = response.json()
-            item = payload["data"][0]
+            items = payload.get("data") or payload.get("images")
+            item = items[0]
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise ImageGenerationError("Image API returned an unexpected response.") from exc
 
@@ -115,11 +163,25 @@ class ImageGenerationClient:
 
         image_url = item.get("url")
         if image_url:
-            raise ImageGenerationError(
-                "Image API returned a URL instead of base64 data; URL download is not enabled."
-            )
+            return await self._download_image_url(image_url)
 
         raise ImageGenerationError("Image API response did not contain an image.")
+
+    async def _download_image_url(self, image_url: str) -> bytes:
+        if image_url.startswith("data:"):
+            try:
+                _, encoded = image_url.split(",", 1)
+                return base64.b64decode(encoded)
+            except (ValueError, binascii.Error) as exc:
+                raise ImageGenerationError("Image API returned invalid data URL image.") from exc
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.get(image_url)
+            if response.is_error:
+                raise ImageGenerationError(
+                    f"Image URL download failed with HTTP {response.status_code}."
+                )
+            return response.content
 
     def _generate_dev_image(self, *, prompt: str, reference_image: bytes | None = None) -> bytes:
         seed = hashlib.sha256(prompt.encode("utf-8")).digest()
@@ -196,6 +258,19 @@ def build_identity_prompt(
             "Use a clean character-focused composition with no text, watermark, or logo.",
         ]
     )
+
+
+def _is_siliconflow_config(config: dict) -> bool:
+    base_url = str(config.get("base_url", "")).lower()
+    return "siliconflow" in base_url
+
+
+def _build_data_url(content: bytes, content_type: str) -> str:
+    media_type = content_type or "image/png"
+    if media_type == "application/octet-stream":
+        media_type = mimetypes.guess_type("image.png")[0] or "image/png"
+    encoded = base64.b64encode(content).decode("ascii")
+    return f"data:{media_type};base64,{encoded}"
 
 
 def media_root(settings: Settings | None = None) -> Path:

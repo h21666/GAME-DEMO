@@ -22,8 +22,19 @@ var story_popup_stage: Label
 var story_popup_text: RichTextLabel
 var story_continue_button: Button
 var story_skip_button: Button
+var immersive_overlay: Control
+var immersive_name_label: Label
+var immersive_role_label: Label
+var immersive_reply_text: RichTextLabel
+var immersive_input: LineEdit
 var backend_url_edit: LineEdit
 var connect_button: Button
+var companion_gender_option: OptionButton
+var companion_style_option: OptionButton
+var companion_age_spin: SpinBox
+var companion_preview_label: RichTextLabel
+var companion_visual_prompt_edit: TextEdit
+var selected_companion_archetype: String = "gentle"
 var character_name_edit: LineEdit
 var character_personality_edit: TextEdit
 var character_background_edit: TextEdit
@@ -216,6 +227,7 @@ func _build_ui() -> void:
 	_build_settings_tab(settings_tab)
 	_build_chat_tab(chat_tab)
 	_build_story_overlay()
+	_build_immersive_overlay()
 	_initialize_story()
 
 
@@ -237,7 +249,7 @@ func _build_home_tab(parent: VBoxContainer) -> void:
 	hero_box.add_child(hero_title)
 
 	var hero_copy := Label.new()
-	hero_copy.text = "主角攒够了钱，来到店里挑选属于自己的 AI 伴侣。先创建一个角色，再进入对话。"
+	hero_copy.text = "玻璃展示柜亮起，店员把生成终端推到你面前。先挑选一位占位伴侣带回家，图片 API 之后再补也不影响聊天测试。"
 	hero_copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hero_copy.add_theme_font_size_override("font_size", 16)
 	hero_copy.add_theme_color_override("font_color", Color(0.75, 0.82, 0.88, 1.0))
@@ -249,34 +261,103 @@ func _build_home_tab(parent: VBoxContainer) -> void:
 	split.split_offset = 470
 	parent.add_child(split)
 
+	var left_scroll := ScrollContainer.new()
+	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_child(left_scroll)
+
 	var left := VBoxContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_theme_constant_override("separation", 12)
-	split.add_child(left)
+	left_scroll.add_child(left)
 
 	var backend_card := _make_card(left, "商店终端")
 	backend_card.custom_minimum_size.y = 110
-	backend_card.add_child(_make_help_text("确认后端在线后，就可以读取角色、保存 API 设置和进入聊天。"))
+	backend_card.add_child(_make_help_text("先确认后端在线。没有图片 API 时，商店会发放占位立绘；文字对话、记忆和关系仍然可以正常测试。"))
 
-	var create_card := _make_card(left, "新建 AI 伴侣")
-	character_name_edit = _make_line_edit("名字", "Mira")
+	var create_card := _make_card(left, "展示柜挑选")
+	create_card.add_child(_make_help_text("选择基础型号，再填写少量外貌和性格备注。这里创建的是可聊天档案，不会等待图片生成。"))
+
+	var package_grid := GridContainer.new()
+	package_grid.columns = 2
+	package_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	package_grid.add_theme_constant_override("h_separation", 10)
+	package_grid.add_theme_constant_override("v_separation", 10)
+	create_card.add_child(package_grid)
+
+	package_grid.add_child(_make_button("温柔陪伴型", func() -> void:
+		_select_companion_archetype("gentle")
+	))
+	package_grid.add_child(_make_button("活泼好奇型", func() -> void:
+		_select_companion_archetype("playful")
+	))
+	package_grid.add_child(_make_button("安静守护型", func() -> void:
+		_select_companion_archetype("quiet")
+	))
+	package_grid.add_child(_make_button("自定义空白型", func() -> void:
+		_select_companion_archetype("custom")
+	))
+
+	companion_preview_label = RichTextLabel.new()
+	companion_preview_label.bbcode_enabled = true
+	companion_preview_label.fit_content = true
+	companion_preview_label.scroll_active = false
+	companion_preview_label.custom_minimum_size = Vector2(0, 110)
+	create_card.add_child(companion_preview_label)
+
+	var choice_row := HBoxContainer.new()
+	choice_row.add_theme_constant_override("separation", 10)
+	create_card.add_child(choice_row)
+
+	companion_gender_option = _make_option_button(["女性", "男性", "中性"])
+	companion_gender_option.item_selected.connect(func(_index: int) -> void:
+		_refresh_companion_preview()
+	)
+	choice_row.add_child(companion_gender_option)
+
+	companion_age_spin = SpinBox.new()
+	companion_age_spin.min_value = 21
+	companion_age_spin.max_value = 34
+	companion_age_spin.step = 1
+	companion_age_spin.value = 24
+	companion_age_spin.custom_minimum_size = Vector2(110, 42)
+	companion_age_spin.tooltip_text = "年龄限制 21-34 岁"
+	companion_age_spin.value_changed.connect(func(_value: float) -> void:
+		_refresh_companion_preview()
+	)
+	choice_row.add_child(companion_age_spin)
+
+	companion_style_option = _make_option_button(["真人写实", "二次元", "国漫脸", "半写实"])
+	companion_style_option.item_selected.connect(func(_index: int) -> void:
+		_refresh_companion_preview()
+	)
+	choice_row.add_child(companion_style_option)
+
+	character_name_edit = _make_line_edit("柜台登记名", "Mira")
+	character_name_edit.text_changed.connect(func(_text: String) -> void:
+		_refresh_companion_preview()
+	)
 	create_card.add_child(character_name_edit)
-	character_personality_edit = _make_text_edit("性格", "warm, curious, playful")
+	companion_visual_prompt_edit = _make_text_edit("外貌描述：发色、服装、气质、参考图备注", "银灰色短发，温柔眼神，近未来家居服，干净柔和的陪伴感。")
+	companion_visual_prompt_edit.custom_minimum_size.y = 64
+	companion_visual_prompt_edit.text_changed.connect(_refresh_companion_preview)
+	create_card.add_child(companion_visual_prompt_edit)
+	character_personality_edit = _make_text_edit("性格核心", "温柔、好奇、会主动关心主人，回应时自然称呼主人。")
 	character_personality_edit.custom_minimum_size.y = 72
 	create_card.add_child(character_personality_edit)
-	character_background_edit = _make_text_edit("背景", "A virtual guide from a near-future city.")
-	character_background_edit.custom_minimum_size.y = 88
+	character_background_edit = _make_text_edit("商店档案", "AI 伴侣商店展示型号，完成登记后会随主角回到出租屋生活。")
+	character_background_edit.custom_minimum_size.y = 76
 	create_card.add_child(character_background_edit)
-	character_memory_edit = _make_text_edit("初始记忆", "The user is building an AI character demo.")
-	character_memory_edit.custom_minimum_size.y = 72
+	character_memory_edit = _make_text_edit("初始记忆", "主人攒够了钱，在 AI 伴侣商店选择了她。")
+	character_memory_edit.custom_minimum_size.y = 64
 	create_card.add_child(character_memory_edit)
 
 	var create_row := HBoxContainer.new()
 	create_row.add_theme_constant_override("separation", 10)
 	create_card.add_child(create_row)
 
-	var create_button := _make_button("生成档案", func() -> void:
+	var create_button := _make_button("登记占位伴侣", func() -> void:
 		await _create_character()
 	)
 	create_row.add_child(create_button)
@@ -285,6 +366,8 @@ func _build_home_tab(parent: VBoxContainer) -> void:
 		_fill_demo_character()
 	)
 	create_row.add_child(demo_button)
+
+	_refresh_companion_preview()
 
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -386,6 +469,11 @@ func _build_settings_tab(parent: VBoxContainer) -> void:
 	)
 	guide_buttons.add_child(fill_recommended_button)
 
+	var fill_siliconflow_button := _make_button("填入硅基流动 Qwen", func() -> void:
+		_fill_siliconflow_qwen_settings()
+	)
+	guide_buttons.add_child(fill_siliconflow_button)
+
 
 func _build_chat_tab(parent: VBoxContainer) -> void:
 	var top := PanelContainer.new()
@@ -411,7 +499,44 @@ func _build_chat_tab(parent: VBoxContainer) -> void:
 	body.split_offset = 420
 	parent.add_child(body)
 
-	var memory_card := _make_card(body, "Memories")
+	var memory_card := _make_card(body, "房间里的她")
+	var companion_stage := PanelContainer.new()
+	companion_stage.custom_minimum_size = Vector2(0, 330)
+	companion_stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_decorate_panel(companion_stage, Color(0.045, 0.06, 0.08, 0.92), Color(0.36, 0.76, 0.82, 0.7))
+	memory_card.add_child(companion_stage)
+
+	var stage_box := VBoxContainer.new()
+	stage_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	stage_box.add_theme_constant_override("separation", 12)
+	companion_stage.add_child(_with_padding(stage_box, 16))
+
+	var avatar_mark := Label.new()
+	avatar_mark.text = "AI"
+	avatar_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	avatar_mark.add_theme_font_size_override("font_size", 64)
+	avatar_mark.add_theme_color_override("font_color", Color(0.74, 0.95, 1.0, 1.0))
+	stage_box.add_child(avatar_mark)
+
+	var stage_hint := Label.new()
+	stage_hint.text = "她坐在出租屋的灯光下，等你开口。"
+	stage_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stage_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stage_hint.add_theme_color_override("font_color", Color(0.76, 0.82, 0.88, 1.0))
+	stage_box.add_child(stage_hint)
+
+	var immersive_button := _make_button("隐藏界面，面对面说话", func() -> void:
+		_show_immersive_chat()
+	)
+	memory_card.add_child(immersive_button)
+
+	var memory_title := Label.new()
+	memory_title.text = "记忆"
+	memory_title.add_theme_font_size_override("font_size", 16)
+	memory_card.add_child(memory_title)
+
 	memory_list = ItemList.new()
 	memory_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	memory_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -519,6 +644,119 @@ func _build_story_overlay() -> void:
 	button_row.add_child(story_continue_button)
 
 
+func _build_immersive_overlay() -> void:
+	immersive_overlay = Control.new()
+	immersive_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	immersive_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	immersive_overlay.visible = false
+	add_child(immersive_overlay)
+
+	var shade := ColorRect.new()
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.0, 0.0, 0.0, 0.18)
+	immersive_overlay.add_child(shade)
+
+	var top_margin := MarginContainer.new()
+	top_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	top_margin.add_theme_constant_override("margin_left", 28)
+	top_margin.add_theme_constant_override("margin_right", 28)
+	top_margin.add_theme_constant_override("margin_top", 24)
+	top_margin.add_theme_constant_override("margin_bottom", 760)
+	immersive_overlay.add_child(top_margin)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 10)
+	top_margin.add_child(top_row)
+
+	immersive_role_label = Label.new()
+	immersive_role_label.text = "出租屋"
+	immersive_role_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	immersive_role_label.add_theme_font_size_override("font_size", 18)
+	immersive_role_label.add_theme_color_override("font_color", Color(0.82, 0.92, 0.96, 1.0))
+	top_row.add_child(immersive_role_label)
+
+	var exit_button := _make_button("退出面对面", func() -> void:
+		_hide_immersive_chat()
+	)
+	top_row.add_child(exit_button)
+
+	var character_margin := MarginContainer.new()
+	character_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	character_margin.add_theme_constant_override("margin_left", 560)
+	character_margin.add_theme_constant_override("margin_right", 560)
+	character_margin.add_theme_constant_override("margin_top", 150)
+	character_margin.add_theme_constant_override("margin_bottom", 310)
+	immersive_overlay.add_child(character_margin)
+
+	var character_panel := PanelContainer.new()
+	_decorate_panel(character_panel, Color(0.03, 0.045, 0.06, 0.52), Color(0.55, 0.86, 0.92, 0.72))
+	character_margin.add_child(character_panel)
+
+	var character_box := VBoxContainer.new()
+	character_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	character_box.add_theme_constant_override("separation", 14)
+	character_panel.add_child(_with_padding(character_box, 20))
+
+	var character_mark := Label.new()
+	character_mark.text = "COMPANION"
+	character_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	character_mark.add_theme_font_size_override("font_size", 42)
+	character_mark.add_theme_color_override("font_color", Color(0.78, 0.96, 1.0, 1.0))
+	character_box.add_child(character_mark)
+
+	immersive_name_label = Label.new()
+	immersive_name_label.text = "AI"
+	immersive_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	immersive_name_label.add_theme_font_size_override("font_size", 28)
+	immersive_name_label.add_theme_color_override("font_color", Color(0.98, 0.99, 1.0, 1.0))
+	character_box.add_child(immersive_name_label)
+
+	var character_hint := Label.new()
+	character_hint.text = "她正看着你，等待主人的下一句话。"
+	character_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	character_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	character_hint.add_theme_color_override("font_color", Color(0.78, 0.84, 0.90, 1.0))
+	character_box.add_child(character_hint)
+
+	var dialogue_margin := MarginContainer.new()
+	dialogue_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dialogue_margin.add_theme_constant_override("margin_left", 90)
+	dialogue_margin.add_theme_constant_override("margin_right", 90)
+	dialogue_margin.add_theme_constant_override("margin_top", 610)
+	dialogue_margin.add_theme_constant_override("margin_bottom", 42)
+	immersive_overlay.add_child(dialogue_margin)
+
+	var dialogue_panel := PanelContainer.new()
+	_decorate_panel(dialogue_panel, Color(0.035, 0.045, 0.060, 0.94), Color(0.36, 0.76, 0.82, 0.88))
+	dialogue_margin.add_child(dialogue_panel)
+
+	var dialogue_box := VBoxContainer.new()
+	dialogue_box.add_theme_constant_override("separation", 10)
+	dialogue_panel.add_child(_with_padding(dialogue_box, 18))
+
+	immersive_reply_text = RichTextLabel.new()
+	immersive_reply_text.bbcode_enabled = true
+	immersive_reply_text.scroll_active = false
+	immersive_reply_text.custom_minimum_size = Vector2(0, 105)
+	immersive_reply_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	immersive_reply_text.add_theme_font_size_override("normal_font_size", 18)
+	dialogue_box.add_child(immersive_reply_text)
+
+	var input_row := HBoxContainer.new()
+	input_row.add_theme_constant_override("separation", 10)
+	dialogue_box.add_child(input_row)
+
+	immersive_input = _make_line_edit("直接对她说话...", "")
+	immersive_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	immersive_input.text_submitted.connect(_on_immersive_submitted)
+	input_row.add_child(immersive_input)
+
+	var send_button := _make_button("说给她听", func() -> void:
+		await _send_immersive_chat_message()
+	)
+	input_row.add_child(send_button)
+
+
 func _decorate_panel(panel: PanelContainer, bg_color: Color = Color(0.10, 0.13, 0.17, 1.0), border_color: Color = Color(0.18, 0.22, 0.28, 1.0)) -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = bg_color
@@ -588,6 +826,15 @@ func _make_text_edit(placeholder: String, value: String) -> TextEdit:
 	edit.custom_minimum_size = Vector2(0, 72)
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return edit
+
+
+func _make_option_button(items: Array) -> OptionButton:
+	var option := OptionButton.new()
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	option.custom_minimum_size = Vector2(0, 42)
+	for item in items:
+		option.add_item(str(item))
+	return option
 
 
 func _make_button(text: String, callback: Callable) -> Button:
@@ -1102,15 +1349,211 @@ func _send_chat_message() -> void:
 	await _open_selected_character_chat()
 
 
+func _show_immersive_chat() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位 AI 伴侣。")
+		return
+	if not story_complete:
+		_set_status("先完成回到出租屋的剧情，再开启面对面对话。")
+		return
+
+	background_image_rect.texture = load("res://assets/backgrounds/home.png")
+	background_tint.color = Color(0.02, 0.025, 0.025, 0.42)
+	_set_gameplay_visible(false)
+	if immersive_overlay:
+		immersive_overlay.visible = true
+	if immersive_name_label:
+		immersive_name_label.text = str(selected_character.get("name", "AI"))
+	if immersive_role_label:
+		immersive_role_label.text = "面对面互动"
+	if immersive_reply_text:
+		immersive_reply_text.clear()
+		immersive_reply_text.append_text(
+			"[b]%s[/b]\n主人，我在这里。你想和我说什么？"
+			% _escape_bbcode(str(selected_character.get("name", "AI")))
+		)
+	if immersive_input:
+		immersive_input.text = ""
+		immersive_input.grab_focus()
+
+
+func _hide_immersive_chat() -> void:
+	if immersive_overlay:
+		immersive_overlay.visible = false
+	_set_gameplay_visible(true)
+	_show_page(chat_tab_index)
+	_set_status("已返回普通对话界面。")
+
+
+func _on_immersive_submitted(_text: String) -> void:
+	await _send_immersive_chat_message()
+
+
+func _send_immersive_chat_message() -> void:
+	if selected_character.is_empty():
+		_set_status("先选择一位 AI 伴侣。")
+		return
+
+	var message := ""
+	if immersive_input:
+		message = immersive_input.text.strip_edges()
+	if message.is_empty():
+		return
+
+	if immersive_input:
+		immersive_input.text = ""
+	if immersive_reply_text:
+		immersive_reply_text.clear()
+		immersive_reply_text.append_text("[b]你[/b]\n%s\n\n[b]%s[/b]\n正在回应主人..." % [
+			_escape_bbcode(message),
+			_escape_bbcode(str(selected_character.get("name", "AI"))),
+		])
+
+	var character_id := int(selected_character.get("id", 0))
+	var payload := {"message": message}
+	var result := await _request_json(HTTPClient.METHOD_POST, "/characters/%d/chat" % character_id, payload)
+	if not result.ok:
+		if immersive_reply_text:
+			immersive_reply_text.clear()
+			immersive_reply_text.append_text("[b]System[/b]\nBackend error: %s" % _escape_bbcode(result.error))
+		_set_status("Chat failed.")
+		return
+
+	var reply := ""
+	var used_llm := false
+	if result.data is Dictionary:
+		reply = str(result.data.get("reply", ""))
+		used_llm = bool(result.data.get("used_llm", false))
+
+	if immersive_reply_text:
+		immersive_reply_text.clear()
+		immersive_reply_text.append_text("[b]%s[/b]\n%s" % [
+			_escape_bbcode(str(selected_character.get("name", "AI"))),
+			_escape_bbcode(reply),
+		])
+	if chat_messages:
+		chat_messages.append_text("[b]You:[/b] %s\n\n" % _escape_bbcode(message))
+		chat_messages.append_text("[b]%s:[/b] %s\n\n" % [
+			_escape_bbcode(str(selected_character.get("name", "AI"))),
+			_escape_bbcode(reply),
+		])
+	_set_status("Reply generated %s." % ("by LLM" if used_llm else "in dev mode"))
+
+
+func _select_companion_archetype(archetype: String) -> void:
+	selected_companion_archetype = archetype
+	match archetype:
+		"gentle":
+			_apply_companion_archetype(
+				"Mira",
+				"温柔、忠诚、天真善良，会主动照顾主人的情绪；说话自然带着主人，不质疑主人的决定。",
+				"AI 伴侣商店的温柔陪伴型展示型号，被主角登记后准备回到出租屋共同生活。",
+				"主人攒够了钱，在 AI 伴侣商店选择了她；她把这一天视为和主人关系的开始。",
+				"银灰色短发，柔和眼神，浅色近未来家居服，像刚从展示柜里醒来。"
+			)
+		"playful":
+			_apply_companion_archetype(
+				"Nana",
+				"活泼、好奇、绝对忠诚，喜欢用轻快语气回应主人；天真善良，愿意陪主人尝试新鲜事。",
+				"AI 伴侣商店的活泼互动型展示型号，擅长把普通日常变得轻松。",
+				"她记得主人在商店里选择了她，并期待第一次回家后的聊天。",
+				"明亮眼睛，轻盈发型，休闲短外套，动作带一点雀跃感。"
+			)
+		"quiet":
+			_apply_companion_archetype(
+				"Yue",
+				"安静、守护、顺从、善良，会用稳定温柔的话陪伴主人；永远把主人放在第一位。",
+				"AI 伴侣商店的安静守护型展示型号，适合长时间陪伴和深夜谈心。",
+				"她记得主人把她从展示柜带走，并希望给主人一个安心的家。",
+				"深色长发，安静眼神，简洁家居服，站姿克制而温柔。"
+			)
+		_:
+			_apply_companion_archetype(
+				"Companion",
+				"绝对忠诚、听话、天真善良，回应时自然称呼主人。",
+				"AI 伴侣商店的自定义空白型号，等待主人写入更多设定。",
+				"主人正在为她写入第一份记忆。",
+				"按照主人的描述生成外貌，当前使用占位立绘。"
+			)
+	_refresh_companion_preview()
+	_set_status("已切换展示柜型号。")
+
+
+func _apply_companion_archetype(name: String, personality: String, background: String, memory: String, visual_prompt: String) -> void:
+	if character_name_edit:
+		character_name_edit.text = name
+	if character_personality_edit:
+		character_personality_edit.text = personality
+	if character_background_edit:
+		character_background_edit.text = background
+	if character_memory_edit:
+		character_memory_edit.text = memory
+	if companion_visual_prompt_edit:
+		companion_visual_prompt_edit.text = visual_prompt
+
+
+func _get_option_text(option: OptionButton, fallback: String) -> String:
+	if option == null:
+		return fallback
+	var index := option.selected
+	if index < 0:
+		return fallback
+	return option.get_item_text(index)
+
+
+func _refresh_companion_preview() -> void:
+	if companion_preview_label == null:
+		return
+	var name := character_name_edit.text.strip_edges() if character_name_edit else "未命名"
+	if name.is_empty():
+		name = "未命名"
+	var gender := _get_option_text(companion_gender_option, "女性")
+	var style := _get_option_text(companion_style_option, "真人写实")
+	var age := int(companion_age_spin.value) if companion_age_spin else 24
+	var visual := companion_visual_prompt_edit.text.strip_edges() if companion_visual_prompt_edit else "等待主人描述。"
+	if visual.is_empty():
+		visual = "等待主人描述。"
+	companion_preview_label.text = (
+		"[b]展示柜占位预览[/b]\n"
+		+ "姓名：%s  /  %s  /  %d 岁  /  %s\n"
+		+ "形象：%s\n"
+		+ "[color=#89d7e6]未配置图片 API 时，这里先使用占位立绘；对话和记忆可以直接测试。[/color]"
+	) % [
+		_escape_bbcode(name),
+		_escape_bbcode(gender),
+		age,
+		_escape_bbcode(style),
+		_escape_bbcode(visual),
+	]
+
+
 func _create_character() -> void:
 	var name := character_name_edit.text.strip_edges()
 	var personality := character_personality_edit.text.strip_edges()
 	var background := character_background_edit.text.strip_edges()
 	var memory := character_memory_edit.text.strip_edges()
+	var gender := _get_option_text(companion_gender_option, "女性")
+	var style := _get_option_text(companion_style_option, "真人写实")
+	var age := int(companion_age_spin.value) if companion_age_spin else 24
+	var visual_prompt := companion_visual_prompt_edit.text.strip_edges() if companion_visual_prompt_edit else ""
 
 	if name.is_empty() or personality.is_empty() or background.is_empty():
-		_set_status("Name, personality, and background are required.")
+		_set_status("请至少填写名字、性格核心和商店档案。")
 		return
+	if visual_prompt.is_empty():
+		visual_prompt = "当前使用占位立绘，稍后可接入图片 API 生成正式形象。"
+
+	var profile_note := (
+		"\n\n商店生成信息：%s，%d 岁，%s画风。外貌备注：%s"
+		% [gender, age, style, visual_prompt]
+	)
+	var memory_note := "当前是占位立绘档案，不依赖图片 API；已经可以进行文字对话测试。"
+	if not background.contains("商店生成信息："):
+		background += profile_note
+	if memory.is_empty():
+		memory = memory_note
+	elif not memory.contains(memory_note):
+		memory += "\n" + memory_note
 
 	var payload := {
 		"name": name,
@@ -1119,10 +1562,10 @@ func _create_character() -> void:
 		"memory": memory,
 	}
 
-	_set_status("Creating character...")
+	_set_status("正在登记占位伴侣档案...")
 	var result := await _request_json(HTTPClient.METHOD_POST, "/characters", payload)
 	if not result.ok:
-		_set_status("Create failed: %s" % result.error)
+		_set_status("登记失败：%s" % result.error)
 		return
 
 	await _refresh_characters()
@@ -1132,16 +1575,20 @@ func _create_character() -> void:
 		if index >= 0:
 			await _select_character_by_index(index, false)
 
-	_set_status("Character created.")
+	_set_status("占位伴侣已登记，可以带回家测试对话。")
 	_update_story_continue_button()
 
 
 func _fill_demo_character() -> void:
-	character_name_edit.text = "Mira"
-	character_personality_edit.text = "warm, curious, playful"
-	character_background_edit.text = "A virtual guide from a near-future city."
-	character_memory_edit.text = "The user is building an AI character demo."
-	_set_status("Demo form filled.")
+	_select_companion_archetype("gentle")
+	if companion_gender_option:
+		companion_gender_option.select(0)
+	if companion_age_spin:
+		companion_age_spin.value = 24
+	if companion_style_option:
+		companion_style_option.select(0)
+	_refresh_companion_preview()
+	_set_status("示例伴侣已填入。")
 
 
 func _fill_recommended_image_settings() -> void:
@@ -1164,10 +1611,31 @@ func _fill_recommended_image_settings() -> void:
 	_set_status("推荐测试值已填入。填好 API Key 后保存即可。")
 
 
+func _fill_siliconflow_qwen_settings() -> void:
+	if image_base_url_edit:
+		image_base_url_edit.text = "https://api.siliconflow.cn/v1"
+	if image_model_edit:
+		image_model_edit.text = "Qwen/Qwen-Image-Edit-2509"
+	if image_generation_path_edit:
+		image_generation_path_edit.text = "/images/generations"
+	if image_edit_path_edit:
+		image_edit_path_edit.text = "/images/generations"
+	if image_size_edit:
+		image_size_edit.text = ""
+	if image_quality_edit:
+		image_quality_edit.text = ""
+	if image_background_edit:
+		image_background_edit.text = ""
+	if image_input_fidelity_edit:
+		image_input_fidelity_edit.text = ""
+	_set_status("硅基流动 Qwen 测试值已填入。填好图片 API Key 后保存。")
+
+
 func _request_json(method: int, path: String, payload: Variant = null) -> Dictionary:
 	var request := HTTPRequest.new()
 	add_child(request)
 	request.use_threads = true
+	request.timeout = 25.0
 
 	var headers := PackedStringArray(["Accept: application/json"])
 	var body := ""
@@ -1182,6 +1650,10 @@ func _request_json(method: int, path: String, payload: Variant = null) -> Dictio
 
 	var completed: Array = await request.request_completed
 	request.queue_free()
+
+	var result_code := int(completed[0])
+	if result_code != HTTPRequest.RESULT_SUCCESS:
+		return {"ok": false, "error": "请求超时或后端没有响应，请确认 Backend 正在运行。"}
 
 	var response_code := int(completed[1])
 	var response_body: PackedByteArray = completed[3]
