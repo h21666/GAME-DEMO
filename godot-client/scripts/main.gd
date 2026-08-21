@@ -1529,6 +1529,14 @@ func _ensure_placeholder_portrait() -> Texture2D:
 func _show_page(index: int) -> void:
 	if tab_container == null:
 		return
+	_set_gameplay_visible(true)
+	tab_container.visible = true
+	if shop_overlay:
+		shop_overlay.visible = false
+	if immersive_overlay:
+		immersive_overlay.visible = false
+	if schedule_overlay:
+		schedule_overlay.visible = false
 	tab_container.current_tab = clamp(index, 0, tab_container.get_tab_count() - 1)
 
 
