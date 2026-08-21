@@ -877,6 +877,7 @@ func _build_shop_overlay() -> void:
 	var shade := ColorRect.new()
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.color = Color(0.0, 0.01, 0.02, 0.18)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_overlay.add_child(shade)
 
 	var top_margin := MarginContainer.new()
@@ -885,10 +886,14 @@ func _build_shop_overlay() -> void:
 	top_margin.add_theme_constant_override("margin_right", 28)
 	top_margin.add_theme_constant_override("margin_top", 22)
 	top_margin.add_theme_constant_override("margin_bottom", 780)
+	top_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_margin.z_index = 50
 	shop_overlay.add_child(top_margin)
 
 	var top_row := HBoxContainer.new()
 	top_row.add_theme_constant_override("separation", 10)
+	top_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_row.z_index = 50
 	top_margin.add_child(top_row)
 
 	var title := Label.new()
@@ -896,18 +901,21 @@ func _build_shop_overlay() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0, 1.0))
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_row.add_child(title)
 
 	var settings_button := _make_button("API", func() -> void:
-		_hide_shop_overlay()
-		_show_page(settings_tab_index)
+		_open_shop_page(settings_tab_index, "API 设置已打开。")
 	)
+	settings_button.z_index = 100
+	settings_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	top_row.add_child(settings_button)
 
 	var debug_button := _make_button("后台", func() -> void:
-		_hide_shop_overlay()
-		_show_page(home_tab_index)
+		_open_shop_page(home_tab_index, "后台角色管理已打开。")
 	)
+	debug_button.z_index = 100
+	debug_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	top_row.add_child(debug_button)
 
 	var display_margin := MarginContainer.new()
@@ -916,6 +924,7 @@ func _build_shop_overlay() -> void:
 	display_margin.add_theme_constant_override("margin_right", 560)
 	display_margin.add_theme_constant_override("margin_top", 150)
 	display_margin.add_theme_constant_override("margin_bottom", 330)
+	display_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_overlay.add_child(display_margin)
 
 	var display_panel := PanelContainer.new()
@@ -948,6 +957,7 @@ func _build_shop_overlay() -> void:
 	dock_margin.add_theme_constant_override("margin_right", 80)
 	dock_margin.add_theme_constant_override("margin_top", 560)
 	dock_margin.add_theme_constant_override("margin_bottom", 36)
+	dock_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_overlay.add_child(dock_margin)
 
 	var dock_panel := PanelContainer.new()
@@ -1538,6 +1548,20 @@ func _show_page(index: int) -> void:
 	if schedule_overlay:
 		schedule_overlay.visible = false
 	tab_container.current_tab = clamp(index, 0, tab_container.get_tab_count() - 1)
+
+
+func _open_shop_page(index: int, status_text: String) -> void:
+	_set_gameplay_visible(true)
+	if tab_container:
+		tab_container.visible = true
+		tab_container.current_tab = clamp(index, 0, tab_container.get_tab_count() - 1)
+	if shop_overlay:
+		shop_overlay.visible = false
+	if immersive_overlay:
+		immersive_overlay.visible = false
+	if schedule_overlay:
+		schedule_overlay.visible = false
+	_set_status(status_text)
 
 
 func _build_url(path: String) -> String:
